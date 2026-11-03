@@ -1,0 +1,213 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShiftPilot</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial;background:#f3f5fa;color:#182238}
+header{background:#14213b;color:white;padding:25px}
+header h1{margin:0}
+nav{display:flex;gap:7px;overflow:auto;background:white;padding:12px;position:sticky;top:0}
+button{border:0;border-radius:8px;padding:12px;background:#5865df;color:white;font-weight:bold}
+nav button{background:#edf0fa;color:#273451;white-space:nowrap}
+nav button.active{background:#5865df;color:white}
+main{padding:16px;max-width:800px;margin:auto}
+.page{display:none}.page.active{display:block}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{background:white;padding:16px;border-radius:12px;margin:10px 0;box-shadow:0 2px 8px #00000008}
+.number{font-size:26px;font-weight:bold;margin-top:10px}
+small{color:#77839a}
+input,select{width:100%;padding:12px;margin:7px 0 15px;border:1px solid #ddd;border-radius:8px;background:white}
+label{font-weight:bold;font-size:14px}
+h2{font-size:23px}
+.item{padding:12px 0;border-bottom:1px solid #eee}
+.delete{background:#ffe9e9;color:#b22;margin-left:8px}
+</style>
+</head>
+<body>
+<header>
+<h1>✦ ShiftPilot</h1>
+<p>La gestion intelligente de vos équipes</p>
+</header>
+
+<nav>
+<button class="active" onclick="page('accueil',this)">Accueil</button>
+<button onclick="page('equipe',this)">Équipe</button>
+<button onclick="page('planning',this)">Planning</button>
+<button onclick="page('absences',this)">Absences</button>
+<button onclick="page('couts',this)">Coûts</button>
+</nav>
+
+<main>
+<section id="accueil" class="page active">
+<h2>Tableau de bord 👋</h2>
+<div class="cards">
+<div class="card">Salariés<div class="number" id="nbStaff">0</div></div>
+<div class="card">Services<div class="number" id="nbShifts">0</div></div>
+<div class="card">Absences<div class="number" id="nbAbs">0</div></div>
+<div class="card">Heures<div class="number" id="nbHours">0 h</div></div>
+</div>
+<div class="card">
+<h3>Bienvenue sur ShiftPilot</h3>
+<p>Gérez vos salariés, vos horaires et votre organisation au même endroit.</p>
+</div>
+</section>
+
+<section id="equipe" class="page">
+<h2>Gestion de l'équipe</h2>
+<div class="card">
+<h3>Ajouter un salarié</h3>
+<label>Nom complet</label>
+<input id="nom" placeholder="Nom et prénom">
+<label>Poste</label>
+<select id="poste">
+<option>Serveur / Serveuse</option>
+<option>Chef de rang</option>
+<option>Cuisinier</option>
+<option>Réceptionniste</option>
+<option>Manager</option>
+<option>Commis</option>
+<option>Autre</option>
+</select>
+<label>Taux horaire brut (€)</label>
+<input id="taux" type="number" placeholder="12">
+<button onclick="ajouterSalarie()">Ajouter</button>
+</div>
+<div class="card">
+<h3>Liste des salariés</h3>
+<div id="listeEquipe"></div>
+</div>
+</section>
+
+<section id="planning" class="page">
+<h2>Planning hebdomadaire</h2>
+<div class="card">
+<h3>Créer un service</h3>
+<label>Salarié</label>
+<select id="salPlanning"></select>
+<label>Date</label>
+<input id="datePlanning" type="date">
+<label>Début</label>
+<input id="debut" type="time" value="09:00">
+<label>Fin</label>
+<input id="fin" type="time" value="17:00">
+<button onclick="ajouterService()">Enregistrer le service</button>
+</div>
+<div class="card">
+<h3>Services programmés</h3>
+<div id="listePlanning"></div>
+</div>
+</section>
+
+<section id="absences" class="page">
+<h2>Gestion des absences</h2>
+<div class="card">
+<label>Salarié</label>
+<select id="salAbsence"></select>
+<label>Date</label>
+<input id="dateAbsence" type="date">
+<label>Motif</label>
+<select id="motif">
+<option>Congé</option>
+<option>Maladie</option>
+<option>Indisponibilité</option>
+<option>Autre</option>
+</select>
+<button onclick="ajouterAbsence()">Enregistrer la demande</button>
+</div>
+<div class="card">
+<h3>Demandes d'absence</h3>
+<div id="listeAbsences"></div>
+</div>
+</section>
+
+<section id="couts" class="page">
+<h2>Suivi des coûts</h2>
+<div class="card">
+<small>Coût brut estimé des services planifiés</small>
+<div class="number" id="coutTotal">0 €</div>
+</div>
+<div class="card">
+<h3>Détail par salarié</h3>
+<div id="detailCouts"></div>
+</div>
+</section>
+</main>
+
+<script>
+let salaries=JSON.parse(localStorage.getItem('sp_salaries')||'[]');
+let services=JSON.parse(localStorage.getItem('sp_services')||'[]');
+let absences=JSON.parse(localStorage.getItem('sp_absences')||'[]');
+
+function sauver(){
+localStorage.setItem('sp_salaries',JSON.stringify(salaries));
+localStorage.setItem('sp_services',JSON.stringify(services));
+localStorage.setItem('sp_absences',JSON.stringify(absences));
+actualiser();
+}
+function page(id,btn){
+document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+document.getElementById(id).classList.add('active');
+document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+btn.classList.add('active');
+actualiser();
+}
+function ajouterSalarie(){
+let nom=document.getElementById('nom').value.trim();
+let taux=Number(document.getElementById('taux').value);
+if(!nom||taux<=0){alert('Remplissez le nom et le taux horaire.');return;}
+salaries.push({id:Date.now(),nom,poste:document.getElementById('poste').value,taux});
+document.getElementById('nom').value='';
+document.getElementById('taux').value='';
+sauver();
+}
+function ajouterService(){
+let id=Number(document.getElementById('salPlanning').value);
+let date=document.getElementById('datePlanning').value;
+let debut=document.getElementById('debut').value;
+let fin=document.getElementById('fin').value;
+if(!id||!date||!debut||!fin||fin<=debut){alert('Vérifiez les informations et les horaires.');return;}
+services.push({id:Date.now(),salarie:id,date,debut,fin});
+sauver();
+}
+function ajouterAbsence(){
+let id=Number(document.getElementById('salAbsence').value);
+let date=document.getElementById('dateAbsence').value;
+if(!id||!date){alert('Choisissez un salarié et une date.');return;}
+absences.push({id:Date.now(),salarie:id,date,motif:document.getElementById('motif').value});
+sauver();
+}
+function supprimer(type,id){
+if(!confirm('Confirmer la suppression ?'))return;
+if(type==='sal'){salaries=salaries.filter(x=>x.id!==id);services=services.filter(x=>x.salarie!==id);absences=absences.filter(x=>x.salarie!==id);}
+if(type==='service')services=services.filter(x=>x.id!==id);
+if(type==='absence')absences=absences.filter(x=>x.id!==id);
+sauver();
+}
+function heures(s){
+let a=s.debut.split(':').map(Number),b=s.fin.split(':').map(Number);
+return (b[0]*60+b[1]-a[0]*60-a[1])/60;
+}
+function actualiser(){
+let options=salaries.map(s=>`<option value="${s.id}">${s.nom}</option>`).join('');
+document.getElementById('salPlanning').innerHTML=options;
+document.getElementById('salAbsence').innerHTML=options;
+document.getElementById('nbStaff').textContent=salaries.length;
+document.getElementById('nbShifts').textContent=services.length;
+document.getElementById('nbAbs').textContent=absences.length;
+let total=services.reduce((n,s)=>n+heures(s),0);
+document.getElementById('nbHours').textContent=total+' h';
+document.getElementById('listeEquipe').innerHTML=salaries.map(s=>`<div class="item"><b>${s.nom}</b><br>${s.poste} · ${s.taux} €/h<button class="delete" onclick="supprimer('sal',${s.id})">Supprimer</button></div>`).join('')||'Aucun salarié ajouté.';
+document.getElementById('listePlanning').innerHTML=services.map(s=>{let p=salaries.find(x=>x.id===s.salarie);return `<div class="item"><b>${p?p.nom:'Salarié'}</b><br>${s.date} · ${s.debut} à ${s.fin}<button class="delete" onclick="supprimer('service',${s.id})">Supprimer</button></div>`}).join('')||'Aucun service programmé.';
+document.getElementById('listeAbsences').innerHTML=absences.map(a=>{let p=salaries.find(x=>x.id===a.salarie);return `<div class="item">${p?p.nom:'Salarié'} · ${a.date}<br>${a.motif}<button class="delete" onclick="supprimer('absence',${a.id})">Supprimer</button></div>`}).join('')||'Aucune absence.';
+let cout=0;
+document.getElementById('detailCouts').innerHTML=salaries.map(p=>{let h=services.filter(s=>s.salarie===p.id).reduce((n,s)=>n+heures(s),0);let c=h*p.taux;cout+=c;return `<div class="item">${p.nom} : ${h} h · ${c.toFixed(2)} €</div>`}).join('')||'Aucun salarié.';
+document.getElementById('coutTotal').textContent=cout.toFixed(2)+' €';
+}
+actualiser();
+</script>
+</body>
+</html>
