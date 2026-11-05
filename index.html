@@ -54,9 +54,54 @@ form{margin-top:15px}
 .shift{background:#e6eaff;color:#4459c9;border-radius:6px;padding:5px 2px;margin:4px 0;font-size:9px;overflow-wrap:anywhere}
 .footer{text-align:center;color:#a1a9b7;font-size:11px;padding:20px}
 @media(min-width:700px){.stats{grid-template-columns:repeat(4,1fr)}main{padding-top:28px}.card{padding:21px}}
+
+.auth-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px 16px;background:linear-gradient(145deg,#101827,#202e4b)}
+.auth-card{width:100%;max-width:430px;background:#fff;border-radius:22px;padding:25px;box-shadow:0 20px 60px #0003}
+.auth-brand{font-size:25px;font-weight:850;letter-spacing:-1px;margin-bottom:5px}.auth-brand span{color:#5267e8}
+.auth-intro{font-size:13px;color:#778196;margin:0 0 22px}
+.auth-tabs{display:flex;background:#f1f3f8;padding:4px;border-radius:11px;margin:18px 0}
+.auth-tabs button{flex:1;border:0;padding:10px;border-radius:8px;background:transparent;color:#667085;font-weight:700}
+.auth-tabs button.active{background:#fff;color:#5267e8;box-shadow:0 1px 4px #0001}
+.auth-card label{display:block;margin-top:5px}
+.auth-card input{margin-bottom:10px}
+.auth-submit{width:100%;padding:13px;border:0;border-radius:11px;background:#5267e8;color:white;font-weight:750;margin-top:8px}
+.auth-message{font-size:13px;line-height:1.5;margin-top:14px;padding:10px;border-radius:9px;display:none}
+.auth-message.error{display:block;background:#fff0f0;color:#b42318}.auth-message.success{display:block;background:#eaf8f1;color:#147a55}
+.auth-foot{font-size:11px;color:#8a93a4;line-height:1.5;margin-top:18px}
+#app-shell{display:none}
+
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
+
+<div id="auth-screen" class="auth-screen">
+ <div class="auth-card">
+  <div class="auth-brand">Shift<span>Pilot</span></div>
+  <p class="auth-intro">L’espace de gestion de votre établissement.</p>
+  <div class="auth-tabs">
+   <button type="button" id="tab-login" class="active">Connexion</button>
+   <button type="button" id="tab-signup">Inscription</button>
+  </div>
+  <form id="login-form">
+   <label for="login-email">Adresse e-mail</label><input id="login-email" type="email" autocomplete="email" required placeholder="vous@exemple.fr">
+   <label for="login-password">Mot de passe</label><input id="login-password" type="password" autocomplete="current-password" required placeholder="Votre mot de passe">
+   <button class="auth-submit" type="submit">Se connecter</button>
+  </form>
+  <form id="signup-form" hidden>
+   <label for="signup-org">Nom de l’établissement</label><input id="signup-org" required autocomplete="organization" placeholder="Ex. Hôtel du Centre">
+   <label for="signup-name">Votre nom complet</label><input id="signup-name" required autocomplete="name" placeholder="Prénom et nom">
+   <label for="signup-email">Adresse e-mail</label><input id="signup-email" type="email" autocomplete="email" required placeholder="vous@exemple.fr">
+   <label for="signup-password">Mot de passe (8 caractères minimum)</label><input id="signup-password" type="password" minlength="8" autocomplete="new-password" required placeholder="Créer un mot de passe">
+   <label for="signup-confirm">Confirmer le mot de passe</label><input id="signup-confirm" type="password" minlength="8" autocomplete="new-password" required placeholder="Répéter le mot de passe">
+   <button class="auth-submit" type="submit">Créer mon compte</button>
+  </form>
+  <div id="auth-message" class="auth-message" role="status" aria-live="polite"></div>
+  <div class="auth-foot">Vos identifiants sont gérés par Supabase. À cette étape, les collaborateurs et plannings restent enregistrés sur cet appareil.</div>
+ </div>
+</div>
+<div id="app-shell">
+
 <header>
  <div class="top">
   <div><div class="logo">Shift<span>Pilot</span></div><div class="tag">SMART TEAM MANAGEMENT</div></div>
@@ -178,5 +223,81 @@ $("addAbsence").addEventListener("submit",e=>{e.preventDefault();let start=$("ab
 $("today").textContent=new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
 refresh();
 </script>
+</div>
+
+<script>
+(function(){
+ const SUPABASE_URL = "https://yyreioqsuluruhelhnpt.supabase.co";
+ const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_jxtnGr1P84XKwX8MdlhDpA_S_aFQJth";
+ const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+ const authScreen=document.getElementById("auth-screen");
+ const app=document.getElementById("app-shell");
+ const loginForm=document.getElementById("login-form");
+ const signupForm=document.getElementById("signup-form");
+ const msg=document.getElementById("auth-message");
+ const loginTab=document.getElementById("tab-login");
+ const signupTab=document.getElementById("tab-signup");
+ function message(text,type){msg.textContent=text;msg.className="auth-message "+type}
+ function showTab(which){
+  const signup=which==="signup";
+  loginForm.hidden=signup;signupForm.hidden=!signup;
+  loginTab.classList.toggle("active",!signup);signupTab.classList.toggle("active",signup);
+  msg.textContent="";msg.className="auth-message";
+ }
+ loginTab.addEventListener("click",()=>showTab("login"));
+ signupTab.addEventListener("click",()=>showTab("signup"));
+ function showApp(session){
+  const user=session&&session.user;
+  if(!user){authScreen.style.display="flex";app.style.display="none";return}
+  authScreen.style.display="none";app.style.display="block";
+  const meta=user.user_metadata||{};
+  const name=meta.full_name||"";
+  const title=document.querySelector(".welcome h1");
+  if(title)title.textContent=name?"Bonjour "+name.split(" ")[0]+" 👋":"Bonjour 👋";
+  const avatar=document.querySelector(".avatar");
+  if(avatar)avatar.textContent=(name||user.email||"SP").trim().charAt(0).toUpperCase();
+  let logout=document.getElementById("shiftpilot-logout");
+  if(!logout){
+   logout=document.createElement("button");logout.id="shiftpilot-logout";logout.type="button";logout.textContent="Déconnexion";
+   logout.style.cssText="position:absolute;right:18px;top:72px;background:#293650;color:white;border:1px solid #53617a;border-radius:9px;padding:8px 11px;font-weight:650;font-size:12px";
+   document.querySelector("header").appendChild(logout);
+   logout.addEventListener("click",async()=>{logout.disabled=true;const {error}=await client.auth.signOut();if(error){message(error.message,"error");logout.disabled=false}else{showApp(null);showTab("login")}});
+  }
+ }
+ loginForm.addEventListener("submit",async e=>{
+  e.preventDefault();const btn=loginForm.querySelector("button");btn.disabled=true;btn.textContent="Connexion…";
+  const {data,error}=await client.auth.signInWithPassword({email:document.getElementById("login-email").value.trim(),password:document.getElementById("login-password").value});
+  if(error)message("Connexion impossible : vérifiez votre e-mail et votre mot de passe.","error");
+  else{message("Connexion réussie.","success");showApp(data.session)}
+  btn.disabled=false;btn.textContent="Se connecter";
+ });
+ signupForm.addEventListener("submit",async e=>{
+  e.preventDefault();
+  const password=document.getElementById("signup-password").value;
+  const confirm=document.getElementById("signup-confirm").value;
+  if(password!==confirm){message("Les deux mots de passe ne correspondent pas.","error");return}
+  if(password.length<8){message("Le mot de passe doit contenir au moins 8 caractères.","error");return}
+  const btn=signupForm.querySelector("button");btn.disabled=true;btn.textContent="Création…";
+  const {data,error}=await client.auth.signUp({
+   email:document.getElementById("signup-email").value.trim(),
+   password,
+   options:{data:{
+    full_name:document.getElementById("signup-name").value.trim(),
+    organization_name:document.getElementById("signup-org").value.trim()
+   }}
+  });
+  if(error)message("Inscription impossible : "+error.message,"error");
+  else if(data.session){message("Votre compte est créé. Bienvenue sur ShiftPilot !","success");showApp(data.session)}
+  else message("Votre demande d’inscription est enregistrée. Consultez votre boîte e-mail pour confirmer votre adresse avant de vous connecter.","success");
+  btn.disabled=false;btn.textContent="Créer mon compte";
+ });
+ client.auth.onAuthStateChange((_event,session)=>showApp(session));
+ client.auth.getSession().then(({data,error})=>{
+  if(error)message("Impossible de vérifier la session. Rechargez la page.","error");
+  showApp(data&&data.session?data.session:null);
+ });
+})();
+</script>
+
 </body>
 </html>
