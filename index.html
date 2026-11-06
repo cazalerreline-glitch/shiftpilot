@@ -405,10 +405,13 @@ refresh();
   const {data,error}=await client.auth.signUp({
    email:document.getElementById("signup-email").value.trim(),
    password,
-   options:{data:{
-    full_name:document.getElementById("signup-name").value.trim(),
-    organization_name:document.getElementById("signup-org").value.trim()
-   }}
+   options:{
+    emailRedirectTo:"https://cazalerreline-glitch.github.io/shiftpilot/",
+    data:{
+     full_name:document.getElementById("signup-name").value.trim(),
+     organization_name:document.getElementById("signup-org").value.trim()
+    }
+   }
   });
   if(error)message("Inscription impossible : "+error.message,"error");
   else if(data.session){message("Votre compte est créé. Bienvenue sur ShiftPilot !","success");showApp(data.session)}
