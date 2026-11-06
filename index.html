@@ -97,7 +97,7 @@ form{margin-top:15px}
    <button class="auth-submit" type="submit">Créer mon compte</button>
   </form>
   <div id="auth-message" class="auth-message" role="status" aria-live="polite"></div>
-  <div class="auth-foot">Vos identifiants sont gérés par Supabase. À cette étape, les collaborateurs et plannings restent enregistrés sur cet appareil.</div>
+  <div class="auth-foot">Vos identifiants sont sécurisés par Supabase. Vos collaborateurs, plannings et absences sont synchronisés en ligne avec votre établissement.</div>
  </div>
 </div>
 <div id="app-shell">
@@ -276,17 +276,18 @@ refresh();
     client.from("Absences").select("id,employee_id,reason,start_date,end_date,status").eq("organization_id",org.id)
    ]);
    if(er.error)throw er.error;if(sr.error)throw sr.error;if(ar.error)throw ar.error;
-   if(!localStorage.getItem(marker)&&!(er.data||[]).length&&!(sr.data||[]).length&&!(ar.data||[]).length){
-    if(localEmployees.length){
+   if(!localStorage.getItem(marker)){
+    if(!(er.data||[]).length&&localEmployees.length){
      const rows=localEmployees.map(x=>({id:x.id,organization_id:org.id,user_id:null,name:x.name||"Collaborateur",job_title:x.role||"Autre",hourly_rate:Number(x.rate)||0}));
      const saved=await client.from("Employées").insert(rows);if(saved.error)throw saved.error;
     }
-    if(localShifts.length){
-     const rows=localShifts.filter(x=>localEmployees.some(e=>e.id===x.employee)).map(x=>({id:x.id,organization_id:org.id,employee_id:x.employee,shift_date:x.date,start_time:x.start,end_time:x.end}));
+    const knownEmployeeIds=new Set([...(er.data||[]).map(x=>x.id),...localEmployees.map(x=>x.id)]);
+    if(!(sr.data||[]).length&&localShifts.length){
+     const rows=localShifts.filter(x=>knownEmployeeIds.has(x.employee)).map(x=>({id:x.id,organization_id:org.id,employee_id:x.employee,shift_date:x.date,start_time:x.start,end_time:x.end}));
      if(rows.length){const saved=await client.from("Shifts").insert(rows);if(saved.error)throw saved.error}
     }
-    if(localAbsences.length){
-     const rows=localAbsences.filter(x=>localEmployees.some(e=>e.id===x.employee)).map(x=>({id:x.id,organization_id:org.id,employee_id:x.employee,reason:x.reason||"Autre",start_date:x.start,end_date:x.end,status:"pending"}));
+    if(!(ar.data||[]).length&&localAbsences.length){
+     const rows=localAbsences.filter(x=>knownEmployeeIds.has(x.employee)).map(x=>({id:x.id,organization_id:org.id,employee_id:x.employee,reason:x.reason||"Autre",start_date:x.start,end_date:x.end,status:"pending"}));
      if(rows.length){const saved=await client.from("Absences").insert(rows);if(saved.error)throw saved.error}
     }
     localStorage.setItem(marker,"1");
