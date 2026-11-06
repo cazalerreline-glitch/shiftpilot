@@ -281,7 +281,7 @@ refresh();
      const rows=localEmployees.map(x=>({id:x.id,organization_id:org.id,user_id:null,name:x.name||"Collaborateur",job_title:x.role||"Autre",hourly_rate:Number(x.rate)||0}));
      const saved=await client.from("Employées").insert(rows);if(saved.error)throw saved.error;
     }
-    const knownEmployeeIds=new Set([...(er.data||[]).map(x=>x.id),...localEmployees.map(x=>x.id)]);
+    const knownEmployeeIds=new Set((er.data||[]).length?(er.data||[]).map(x=>x.id):localEmployees.map(x=>x.id));
     if(!(sr.data||[]).length&&localShifts.length){
      const rows=localShifts.filter(x=>knownEmployeeIds.has(x.employee)).map(x=>({id:x.id,organization_id:org.id,employee_id:x.employee,shift_date:x.date,start_time:x.start,end_time:x.end}));
      if(rows.length){const saved=await client.from("Shifts").insert(rows);if(saved.error)throw saved.error}
@@ -373,7 +373,9 @@ refresh();
    employees=[];shifts=[];absences=[];refresh();cloudStatus("","info");return;
   }
   authScreen.style.display="none";app.style.display="block";
-  if(window.shiftPilotLoadedUser!==user.id){window.shiftPilotLoadedUser=user.id;loadCloudData(user);}
+  if(window.shiftPilotLoadedUser!==user.id){
+   window.shiftPilotLoadedUser=user.id;employees=[];shifts=[];absences=[];refresh();loadCloudData(user);
+  }
   const meta=user.user_metadata||{};
   const name=meta.full_name||"";
   const title=document.querySelector(".welcome h1");
