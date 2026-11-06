@@ -121,6 +121,7 @@ form{margin-top:15px}
  <button data-page="costs">Coûts</button>
 </nav>
 <main>
+<div id="cloud-status" role="status" aria-live="polite" style="display:none;margin:0 0 14px;padding:12px 14px;border-radius:11px;font-size:12px;line-height:1.5"></div>
 <section id="home" class="section active">
  <div class="heading"><div><h2>Vue d'ensemble</h2><div class="sub" id="today"></div></div></div>
  <div class="stats">
@@ -213,13 +214,13 @@ function refresh(){
 }
 function rowPerson(e,del=false){return `<div class="item"><div class="person"><div class="initial">${safe(e.name.charAt(0).toUpperCase())}</div><div><strong>${safe(e.name)}</strong><small>${safe(e.role)}</small></div></div>${del?`<button class="secondary" onclick="removeEmployee('${e.id}')">Supprimer</button>`:'<span class="pill">Actif</span>'}</div>`}
 function shiftRow(s){let e=person(s.employee);return `<div class="item"><div><strong>${safe(e?.name||"Collaborateur supprimé")}</strong><div class="sub">${dateFR(s.date)} · ${s.start} – ${s.end} · ${hours(s).toFixed(1)} h</div></div><button class="secondary" onclick="removeShift('${s.id}')">Supprimer</button></div>`}
-function removeEmployee(id){if(!confirm("Supprimer ce collaborateur ?"))return;employees=employees.filter(e=>e.id!==id);save("employees",employees);refresh()}
-function removeShift(id){shifts=shifts.filter(s=>s.id!==id);save("shifts",shifts);refresh()}
-function removeAbs(id){absences=absences.filter(a=>a.id!==id);save("absences",absences);refresh()}
+function removeEmployee(id){if(window.shiftPilotCloudDeleteEmployee){window.shiftPilotCloudDeleteEmployee(id);return}if(!confirm("Supprimer ce collaborateur ?"))return;employees=employees.filter(e=>e.id!==id);save("employees",employees);refresh()}
+function removeShift(id){if(window.shiftPilotCloudDeleteShift){window.shiftPilotCloudDeleteShift(id);return}shifts=shifts.filter(s=>s.id!==id);save("shifts",shifts);refresh()}
+function removeAbs(id){if(window.shiftPilotCloudDeleteAbsence){window.shiftPilotCloudDeleteAbsence(id);return}absences=absences.filter(a=>a.id!==id);save("absences",absences);refresh()}
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".section").forEach(x=>x.classList.remove("active"));b.classList.add("active");$(b.dataset.page).classList.add("active")}));
-$("addEmployee").addEventListener("submit",e=>{e.preventDefault();employees.push({id:crypto.randomUUID(),name:$("empName").value.trim(),role:$("empRole").value,rate:Number($("empRate").value)});save("employees",employees);e.target.reset();$("employeeForm").hidden=true;refresh()});
-$("addShift").addEventListener("submit",e=>{e.preventDefault();let start=$("shiftStart").value,end=$("shiftEnd").value;if(end<=start){alert("L'heure de fin doit être après l'heure de début.");return}shifts.push({id:crypto.randomUUID(),employee:$("shiftEmployee").value,date:$("shiftDate").value,start,end});save("shifts",shifts);e.target.reset();$("shiftForm").hidden=true;refresh()});
-$("addAbsence").addEventListener("submit",e=>{e.preventDefault();let start=$("absStart").value,end=$("absEnd").value;if(end<start){alert("La date de fin doit être après la date de début.");return}absences.push({id:crypto.randomUUID(),employee:$("absEmployee").value,reason:$("absReason").value,start,end});save("absences",absences);e.target.reset();$("absenceForm").hidden=true;refresh()});
+$("addEmployee").addEventListener("submit",e=>{e.preventDefault();if(window.shiftPilotCloudSaveEmployee){window.shiftPilotCloudSaveEmployee();return}employees.push({id:crypto.randomUUID(),name:$("empName").value.trim(),role:$("empRole").value,rate:Number($("empRate").value)});save("employees",employees);e.target.reset();$("employeeForm").hidden=true;refresh()});
+$("addShift").addEventListener("submit",e=>{e.preventDefault();if(window.shiftPilotCloudSaveShift){window.shiftPilotCloudSaveShift();return}let start=$("shiftStart").value,end=$("shiftEnd").value;if(end<=start){alert("L'heure de fin doit être après l'heure de début.");return}shifts.push({id:crypto.randomUUID(),employee:$("shiftEmployee").value,date:$("shiftDate").value,start,end});save("shifts",shifts);e.target.reset();$("shiftForm").hidden=true;refresh()});
+$("addAbsence").addEventListener("submit",e=>{e.preventDefault();if(window.shiftPilotCloudSaveAbsence){window.shiftPilotCloudSaveAbsence();return}let start=$("absStart").value,end=$("absEnd").value;if(end<start){alert("La date de fin doit être après la date de début.");return}absences.push({id:crypto.randomUUID(),employee:$("absEmployee").value,reason:$("absReason").value,start,end});save("absences",absences);e.target.reset();$("absenceForm").hidden=true;refresh()});
 $("today").textContent=new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
 refresh();
 </script>
@@ -230,6 +231,10 @@ refresh();
  const SUPABASE_URL = "https://yyreioqsuluruhelhnpt.supabase.co";
  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_jxtnGr1P84XKwX8MdlhDpA_S_aFQJth";
  const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+ window.shiftPilotClient=client;
+ window.shiftPilotCloudReady=false;
+ window.shiftPilotOrgId=null;
+ window.shiftPilotLoadedUser=null;
  const authScreen=document.getElementById("auth-screen");
  const app=document.getElementById("app-shell");
  const loginForm=document.getElementById("login-form");
@@ -238,6 +243,119 @@ refresh();
  const loginTab=document.getElementById("tab-login");
  const signupTab=document.getElementById("tab-signup");
  function message(text,type){msg.textContent=text;msg.className="auth-message "+type}
+ function cloudStatus(text,type){
+  const el=document.getElementById("cloud-status");if(!el)return;
+  el.textContent=text;el.style.display=text?"block":"none";
+  el.style.background=type==="error"?"#fff0f0":type==="success"?"#eaf8f1":"#edf0ff";
+  el.style.color=type==="error"?"#b42318":type==="success"?"#147a55":"#4459c9";
+ }
+ function cloudError(label,error){console.error(label,error);cloudStatus(label+(error&&error.message?" : "+error.message:""),"error")}
+ async function loadCloudData(user){
+  window.shiftPilotCloudReady=false;
+  cloudStatus("Connexion à votre espace et synchronisation des données…","info");
+  try{
+   let {data:org,error:orgError}=await client.from("Organisations").select("id,name").eq("created_by",user.id).maybeSingle();
+   if(orgError)throw orgError;
+   if(!org){
+    const membership=await client.from("Memberships").select("organization_id").eq("user_id",user.id).maybeSingle();
+    if(membership.error)throw membership.error;
+    if(membership.data){
+     const found=await client.from("Organisations").select("id,name").eq("id",membership.data.organization_id).maybeSingle();
+     if(found.error)throw found.error;org=found.data;
+    }
+   }
+   if(!org)throw new Error("Aucun établissement associé à ce compte. Contactez l’assistance ShiftPilot.");
+   window.shiftPilotOrgId=org.id;
+   const localEmployees=JSON.parse(localStorage.getItem("shiftpilot_employees")||"[]");
+   const localShifts=JSON.parse(localStorage.getItem("shiftpilot_shifts")||"[]");
+   const localAbsences=JSON.parse(localStorage.getItem("shiftpilot_absences")||"[]");
+   const marker="shiftpilot_cloud_migrated_"+user.id;
+   const [er,sr,ar]=await Promise.all([
+    client.from("Employées").select("id,name,job_title,hourly_rate").eq("organization_id",org.id),
+    client.from("Shifts").select("id,employee_id,shift_date,start_time,end_time").eq("organization_id",org.id),
+    client.from("Absences").select("id,employee_id,reason,start_date,end_date,status").eq("organization_id",org.id)
+   ]);
+   if(er.error)throw er.error;if(sr.error)throw sr.error;if(ar.error)throw ar.error;
+   if(!localStorage.getItem(marker)&&!(er.data||[]).length&&!(sr.data||[]).length&&!(ar.data||[]).length){
+    if(localEmployees.length){
+     const rows=localEmployees.map(x=>({id:x.id,organization_id:org.id,user_id:null,name:x.name||"Collaborateur",job_title:x.role||"Autre",hourly_rate:Number(x.rate)||0}));
+     const saved=await client.from("Employées").insert(rows);if(saved.error)throw saved.error;
+    }
+    if(localShifts.length){
+     const rows=localShifts.filter(x=>localEmployees.some(e=>e.id===x.employee)).map(x=>({id:x.id,organization_id:org.id,employee_id:x.employee,shift_date:x.date,start_time:x.start,end_time:x.end}));
+     if(rows.length){const saved=await client.from("Shifts").insert(rows);if(saved.error)throw saved.error}
+    }
+    if(localAbsences.length){
+     const rows=localAbsences.filter(x=>localEmployees.some(e=>e.id===x.employee)).map(x=>({id:x.id,organization_id:org.id,employee_id:x.employee,reason:x.reason||"Autre",start_date:x.start,end_date:x.end,status:"pending"}));
+     if(rows.length){const saved=await client.from("Absences").insert(rows);if(saved.error)throw saved.error}
+    }
+    localStorage.setItem(marker,"1");
+   }
+   const [employeesResult,shiftsResult,absencesResult]=await Promise.all([
+    client.from("Employées").select("id,name,job_title,hourly_rate").eq("organization_id",org.id).order("created_at",{ascending:true}),
+    client.from("Shifts").select("id,employee_id,shift_date,start_time,end_time").eq("organization_id",org.id).order("shift_date",{ascending:true}),
+    client.from("Absences").select("id,employee_id,reason,start_date,end_date,status").eq("organization_id",org.id).order("start_date",{ascending:true})
+   ]);
+   if(employeesResult.error)throw employeesResult.error;if(shiftsResult.error)throw shiftsResult.error;if(absencesResult.error)throw absencesResult.error;
+   employees=(employeesResult.data||[]).map(x=>({id:x.id,name:x.name||"Collaborateur",role:x.job_title,rate:Number(x.hourly_rate)||0}));
+   shifts=(shiftsResult.data||[]).map(x=>({id:x.id,employee:x.employee_id,date:x.shift_date,start:String(x.start_time||"").slice(0,5),end:String(x.end_time||"").slice(0,5)}));
+   absences=(absencesResult.data||[]).map(x=>({id:x.id,employee:x.employee_id,reason:x.reason,start:x.start_date,end:x.end_date,status:x.status}));
+   save("employees",employees);save("shifts",shifts);save("absences",absences);
+   window.shiftPilotCloudReady=true;
+   refresh();
+   const title=document.querySelector(".welcome p");if(title)title.textContent=org.name+" · Données synchronisées";
+   cloudStatus("Votre espace « "+org.name+" » est synchronisé. Vos données sont enregistrées en ligne.","success");
+  }catch(error){window.shiftPilotCloudReady=false;cloudError("La synchronisation a échoué",error)}
+ }
+ async function requireCloud(){
+  if(!window.shiftPilotCloudReady||!window.shiftPilotOrgId){cloudStatus("La synchronisation est encore en cours. Réessayez dans quelques secondes.","error");return false}
+  return true;
+ }
+ window.shiftPilotCloudSaveEmployee=async function(){
+  if(!await requireCloud())return;
+  const name=document.getElementById("empName").value.trim(),role=document.getElementById("empRole").value,rate=Number(document.getElementById("empRate").value);
+  if(!name||!Number.isFinite(rate)||rate<0){cloudStatus("Vérifiez le nom et le coût horaire.","error");return}
+  const {data,error}=await client.from("Employées").insert({organization_id:window.shiftPilotOrgId,user_id:null,name,job_title:role,hourly_rate:rate}).select("id,name,job_title,hourly_rate").single();
+  if(error){cloudError("Impossible d’enregistrer le collaborateur",error);return}
+  employees.push({id:data.id,name:data.name,role:data.job_title,rate:Number(data.hourly_rate)||0});save("employees",employees);
+  document.getElementById("addEmployee").reset();document.getElementById("employeeForm").hidden=true;refresh();cloudStatus("Collaborateur enregistré dans le cloud.","success");
+ };
+ window.shiftPilotCloudSaveShift=async function(){
+  if(!await requireCloud())return;
+  const employee=document.getElementById("shiftEmployee").value,date=document.getElementById("shiftDate").value,start=document.getElementById("shiftStart").value,end=document.getElementById("shiftEnd").value;
+  if(!employee||!date||!start||!end){cloudStatus("Complétez tous les champs du service.","error");return}
+  if(end<=start){cloudStatus("L’heure de fin doit être après l’heure de début.","error");return}
+  const {data,error}=await client.from("Shifts").insert({organization_id:window.shiftPilotOrgId,employee_id:employee,shift_date:date,start_time:start,end_time:end}).select("id,employee_id,shift_date,start_time,end_time").single();
+  if(error){cloudError("Impossible d’enregistrer le service",error);return}
+  shifts.push({id:data.id,employee:data.employee_id,date:data.shift_date,start:String(data.start_time).slice(0,5),end:String(data.end_time).slice(0,5)});save("shifts",shifts);
+  document.getElementById("addShift").reset();document.getElementById("shiftForm").hidden=true;refresh();cloudStatus("Service ajouté au planning en ligne.","success");
+ };
+ window.shiftPilotCloudSaveAbsence=async function(){
+  if(!await requireCloud())return;
+  const employee=document.getElementById("absEmployee").value,reason=document.getElementById("absReason").value,start=document.getElementById("absStart").value,end=document.getElementById("absEnd").value;
+  if(!employee||!start||!end){cloudStatus("Complétez tous les champs de l’absence.","error");return}
+  if(end<start){cloudStatus("La date de fin doit être après la date de début.","error");return}
+  const {data,error}=await client.from("Absences").insert({organization_id:window.shiftPilotOrgId,employee_id:employee,reason,start_date:start,end_date:end,status:"pending"}).select("id,employee_id,reason,start_date,end_date,status").single();
+  if(error){cloudError("Impossible d’enregistrer l’absence",error);return}
+  absences.push({id:data.id,employee:data.employee_id,reason:data.reason,start:data.start_date,end:data.end_date,status:data.status});save("absences",absences);
+  document.getElementById("addAbsence").reset();document.getElementById("absenceForm").hidden=true;refresh();cloudStatus("Absence enregistrée en ligne.","success");
+ };
+ window.shiftPilotCloudDeleteShift=async function(id){
+  if(!await requireCloud())return;if(!confirm("Supprimer ce service ?"))return;
+  const {error}=await client.from("Shifts").delete().eq("id",id).eq("organization_id",window.shiftPilotOrgId);if(error){cloudError("Impossible de supprimer le service",error);return}
+  shifts=shifts.filter(x=>x.id!==id);save("shifts",shifts);refresh();cloudStatus("Service supprimé.","success");
+ };
+ window.shiftPilotCloudDeleteAbsence=async function(id){
+  if(!await requireCloud())return;if(!confirm("Supprimer cette absence ?"))return;
+  const {error}=await client.from("Absences").delete().eq("id",id).eq("organization_id",window.shiftPilotOrgId);if(error){cloudError("Impossible de supprimer l’absence",error);return}
+  absences=absences.filter(x=>x.id!==id);save("absences",absences);refresh();cloudStatus("Absence supprimée.","success");
+ };
+ window.shiftPilotCloudDeleteEmployee=async function(id){
+  if(!await requireCloud())return;if(!confirm("Supprimer ce collaborateur ? Ses services et absences devront d’abord être supprimés."))return;
+  if(shifts.some(x=>x.employee===id)||absences.some(x=>x.employee===id)){cloudStatus("Supprimez d’abord les services et absences de ce collaborateur.","error");return}
+  const {error}=await client.from("Employées").delete().eq("id",id).eq("organization_id",window.shiftPilotOrgId);if(error){cloudError("Impossible de supprimer le collaborateur",error);return}
+  employees=employees.filter(x=>x.id!==id);save("employees",employees);refresh();cloudStatus("Collaborateur supprimé.","success");
+ };
  function showTab(which){
   const signup=which==="signup";
   loginForm.hidden=signup;signupForm.hidden=!signup;
@@ -248,8 +366,13 @@ refresh();
  signupTab.addEventListener("click",()=>showTab("signup"));
  function showApp(session){
   const user=session&&session.user;
-  if(!user){authScreen.style.display="flex";app.style.display="none";return}
+  if(!user){
+   authScreen.style.display="flex";app.style.display="none";
+   window.shiftPilotLoadedUser=null;window.shiftPilotOrgId=null;window.shiftPilotCloudReady=false;
+   employees=[];shifts=[];absences=[];refresh();cloudStatus("","info");return;
+  }
   authScreen.style.display="none";app.style.display="block";
+  if(window.shiftPilotLoadedUser!==user.id){window.shiftPilotLoadedUser=user.id;loadCloudData(user);}
   const meta=user.user_metadata||{};
   const name=meta.full_name||"";
   const title=document.querySelector(".welcome h1");
