@@ -65,6 +65,7 @@ form{margin-top:15px}
 .auth-card label{display:block;margin-top:5px}
 .auth-card input{margin-bottom:10px}
 .auth-submit{width:100%;padding:13px;border:0;border-radius:11px;background:#5267e8;color:white;font-weight:750;margin-top:8px}
+.auth-link{display:block;border:0;background:transparent;color:#5267e8;font-size:12px;font-weight:700;padding:9px 0;cursor:pointer;text-align:left}
 .auth-message{font-size:13px;line-height:1.5;margin-top:14px;padding:10px;border-radius:9px;display:none}
 .auth-message.error{display:block;background:#fff0f0;color:#b42318}.auth-message.success{display:block;background:#eaf8f1;color:#147a55}
 .auth-foot{font-size:11px;color:#8a93a4;line-height:1.5;margin-top:18px}
@@ -86,7 +87,19 @@ form{margin-top:15px}
   <form id="login-form">
    <label for="login-email">Adresse e-mail</label><input id="login-email" type="email" autocomplete="email" required placeholder="vous@exemple.fr">
    <label for="login-password">Mot de passe</label><input id="login-password" type="password" autocomplete="current-password" required placeholder="Votre mot de passe">
+   <button type="button" id="forgot-password-link" class="auth-link">Mot de passe oublié ?</button>
    <button class="auth-submit" type="submit">Se connecter</button>
+  </form>
+  <form id="reset-request-form" hidden>
+   <label for="reset-email">Adresse e-mail du compte</label><input id="reset-email" type="email" autocomplete="email" required placeholder="vous@exemple.fr">
+   <button class="auth-submit" type="submit">Recevoir le lien de réinitialisation</button>
+   <button type="button" id="reset-request-back" class="auth-link">Retour à la connexion</button>
+  </form>
+  <form id="reset-form" hidden>
+   <label for="reset-password">Nouveau mot de passe (8 caractères minimum)</label><input id="reset-password" type="password" minlength="8" autocomplete="new-password" required placeholder="Créer un nouveau mot de passe">
+   <label for="reset-confirm">Confirmer le nouveau mot de passe</label><input id="reset-confirm" type="password" minlength="8" autocomplete="new-password" required placeholder="Répéter le nouveau mot de passe">
+   <button class="auth-submit" type="submit">Enregistrer le nouveau mot de passe</button>
+   <button type="button" id="reset-back" class="auth-link">Retour à la connexion</button>
   </form>
   <form id="signup-form" hidden>
    <label for="signup-org">Nom de l’établissement</label><input id="signup-org" required autocomplete="organization" placeholder="Ex. Hôtel du Centre">
@@ -239,6 +252,8 @@ refresh();
  const app=document.getElementById("app-shell");
  const loginForm=document.getElementById("login-form");
  const signupForm=document.getElementById("signup-form");
+ const resetRequestForm=document.getElementById("reset-request-form");
+ const resetForm=document.getElementById("reset-form");
  const msg=document.getElementById("auth-message");
  const loginTab=document.getElementById("tab-login");
  const signupTab=document.getElementById("tab-signup");
@@ -359,12 +374,46 @@ refresh();
  };
  function showTab(which){
   const signup=which==="signup";
-  loginForm.hidden=signup;signupForm.hidden=!signup;
+  loginForm.hidden=signup;signupForm.hidden=!signup;resetRequestForm.hidden=true;resetForm.hidden=true;
   loginTab.classList.toggle("active",!signup);signupTab.classList.toggle("active",signup);
   msg.textContent="";msg.className="auth-message";
  }
  loginTab.addEventListener("click",()=>showTab("login"));
  signupTab.addEventListener("click",()=>showTab("signup"));
+ document.getElementById("forgot-password-link").addEventListener("click",()=>{
+  loginForm.hidden=true;signupForm.hidden=true;resetForm.hidden=true;resetRequestForm.hidden=false;
+  loginTab.classList.remove("active");signupTab.classList.remove("active");
+  msg.textContent="";msg.className="auth-message";
+ });
+ document.getElementById("reset-request-back").addEventListener("click",()=>showTab("login"));
+ document.getElementById("reset-back").addEventListener("click",()=>showTab("login"));
+ resetRequestForm.addEventListener("submit",async e=>{
+  e.preventDefault();
+  const email=document.getElementById("reset-email").value.trim();
+  const btn=resetRequestForm.querySelector("button[type=submit]");btn.disabled=true;btn.textContent="Envoi…";
+  const redirectTo=window.location.origin+window.location.pathname;
+  const {error}=await client.auth.resetPasswordForEmail(email,{redirectTo});
+  if(error)message("Impossible d’envoyer le lien : "+error.message,"error");
+  else message("Si un compte correspond à cette adresse, un e-mail de réinitialisation vient d’être envoyé. Vérifiez aussi vos courriers indésirables.","success");
+  btn.disabled=false;btn.textContent="Recevoir le lien de réinitialisation";
+ });
+ resetForm.addEventListener("submit",async e=>{
+  e.preventDefault();
+  const password=document.getElementById("reset-password").value;
+  const confirmation=document.getElementById("reset-confirm").value;
+  if(password.length<8){message("Le mot de passe doit contenir au moins 8 caractères.","error");return}
+  if(password!==confirmation){message("Les deux mots de passe ne correspondent pas.","error");return}
+  const btn=resetForm.querySelector("button[type=submit]");btn.disabled=true;btn.textContent="Enregistrement…";
+  const {error}=await client.auth.updateUser({password});
+  if(error)message("Impossible de modifier le mot de passe : "+error.message,"error");
+  else{
+   await client.auth.signOut();
+   document.getElementById("login-password").value="";
+   resetForm.hidden=true;resetRequestForm.hidden=true;showTab("login");
+   message("Votre mot de passe a été modifié. Vous pouvez maintenant vous connecter.","success");
+  }
+  btn.disabled=false;btn.textContent="Enregistrer le nouveau mot de passe";
+ });
  function showApp(session){
   const user=session&&session.user;
   if(!user){
@@ -420,7 +469,16 @@ refresh();
   else message("Votre demande d’inscription est enregistrée. Consultez votre boîte e-mail pour confirmer votre adresse avant de vous connecter.","success");
   btn.disabled=false;btn.textContent="Créer mon compte";
  });
- client.auth.onAuthStateChange((_event,session)=>showApp(session));
+ client.auth.onAuthStateChange((event,session)=>{
+  if(event==="PASSWORD_RECOVERY"){
+   authScreen.style.display="flex";app.style.display="none";
+   loginForm.hidden=true;signupForm.hidden=true;resetRequestForm.hidden=true;resetForm.hidden=false;
+   loginTab.classList.remove("active");signupTab.classList.remove("active");
+   message("Choisissez votre nouveau mot de passe.","success");
+   return;
+  }
+  showApp(session);
+ });
  client.auth.getSession().then(({data,error})=>{
   if(error)message("Impossible de vérifier la session. Rechargez la page.","error");
   showApp(data&&data.session?data.session:null);
