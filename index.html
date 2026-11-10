@@ -132,6 +132,7 @@ form{margin-top:15px}
  <button data-page="planning">Planning</button>
  <button data-page="absence">Absences</button>
  <button data-page="costs">Coûts</button>
+ <button data-page="support">Assistance</button>
 </nav>
 <main>
 <div id="cloud-status" role="status" aria-live="polite" style="display:none;margin:0 0 14px;padding:12px 14px;border-radius:11px;font-size:12px;line-height:1.5"></div>
@@ -196,6 +197,19 @@ form{margin-top:15px}
  <div class="card"><div class="stat-label">Coût horaire total estimé</div><div class="stat-number" id="totalCost">0 €</div><div class="sub">Estimation basée sur les taux horaires saisis et les services planifiés.</div></div>
  <div class="card"><div class="panel-title">Détail par collaborateur</div><div id="costList" class="empty">Aucune donnée disponible.</div></div>
  <p class="sub">Attention : estimation indicative, hors cotisations, majorations, congés et autres charges employeur.</p>
+</section>
+<section id="support" class="section">
+ <div class="heading"><div><h2>Centre d’assistance</h2><div class="sub">Une question ou un problème ? Envoyez-nous un message.</div></div></div>
+ <div class="card">
+  <div class="panel-title">Contacter l’assistance ShiftPilot</div>
+  <form id="supportForm">
+   <label for="supportSubject">Sujet</label><input id="supportSubject" maxlength="120" required placeholder="Ex. Problème avec le planning">
+   <label for="supportMessage">Décrivez votre demande</label><textarea id="supportMessage" maxlength="4000" required rows="5" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;font:inherit;resize:vertical" placeholder="Expliquez-nous ce qui se passe…"></textarea>
+   <button class="action" id="supportSubmit" type="submit">Envoyer ma demande</button>
+  </form>
+  <p class="sub">Votre demande est enregistrée de manière sécurisée et pourra être suivie par l’équipe ShiftPilot.</p>
+ </div>
+ <div class="card"><div class="panel-title">Mes demandes</div><div id="supportList" class="empty">Aucune demande pour le moment.</div></div>
 </section>
 <div class="footer">SHIFTPILOT · Votre équipe, mieux organisée.</div>
 </main>
@@ -324,8 +338,34 @@ refresh();
    refresh();
    const title=document.querySelector(".welcome p");if(title)title.textContent=org.name+" · Données synchronisées";
    cloudStatus("Votre espace « "+org.name+" » est synchronisé. Vos données sont enregistrées en ligne.","success");
+   await loadSupportTickets();
   }catch(error){window.shiftPilotCloudReady=false;cloudError("La synchronisation a échoué",error)}
  }
+ async function loadSupportTickets(){
+  const list=document.getElementById("supportList");
+  if(!list||!window.shiftPilotOrgId)return;
+  const {data,error}=await client.from("SupportTickets").select("id,subject,message,status,created_at").eq("organization_id",window.shiftPilotOrgId).order("created_at",{ascending:false});
+  if(error){list.textContent="Impossible de charger vos demandes pour le moment.";console.error("Support tickets",error);return}
+  if(!data||!data.length){list.textContent="Aucune demande pour le moment.";return}
+  list.innerHTML=data.map(t=>{
+   const statusLabel={open:"En attente",in_progress:"En cours",resolved:"Résolue"}[t.status]||"En attente";
+   const date=new Date(t.created_at).toLocaleString("fr-FR");
+   return '<div class="item" style="align-items:flex-start"><div style="min-width:0"><strong>'+safe(t.subject)+'</strong><div class="sub">'+safe(date)+' · '+safe(statusLabel)+'</div><p style="font-size:13px;line-height:1.5;white-space:pre-wrap">'+safe(t.message)+'</p></div></div>';
+  }).join("");
+ }
+ document.getElementById("supportForm")?.addEventListener("submit",async e=>{
+  e.preventDefault();
+  if(!await requireCloud())return;
+  const subject=document.getElementById("supportSubject").value.trim();
+  const messageText=document.getElementById("supportMessage").value.trim();
+  if(subject.length<4||messageText.length<10){cloudStatus("Le sujet doit contenir 4 caractères et le message au moins 10 caractères.","error");return}
+  const btn=document.getElementById("supportSubmit");btn.disabled=true;btn.textContent="Envoi…";
+  const {data:{user}}=await client.auth.getUser();
+  const {error}=await client.from("SupportTickets").insert({organization_id:window.shiftPilotOrgId,user_id:user.id,subject,message:messageText});
+  if(error){cloudError("Impossible d’envoyer votre demande",error)}
+  else{document.getElementById("supportForm").reset();await loadSupportTickets();cloudStatus("Votre demande a bien été envoyée à l’assistance ShiftPilot.","success")}
+  btn.disabled=false;btn.textContent="Envoyer ma demande";
+ });
  async function requireCloud(){
   if(!window.shiftPilotCloudReady||!window.shiftPilotOrgId){cloudStatus("La synchronisation est encore en cours. Réessayez dans quelques secondes.","error");return false}
   return true;
@@ -359,9 +399,9 @@ refresh();
   absences.push({id:data.id,employee:data.employee_id,reason:data.reason,start:data.start_date,end:data.end_date,status:data.status});save("absences",absences);
   document.getElementById("addAbsence").reset();document.getElementById("absenceForm").hidden=true;refresh();cloudStatus("Absence enregistrée en ligne.","success");
  };
-   window.shiftPilotCloudUpdateEmployee=async function(id,v){if(!await requireCloud())return;const {error}=await client.from('Employées').update({name:v.name,job_title:v.role,hourly_rate:v.rate}).eq('id',id).eq('organization_id',window.shiftPilotOrgId);if(error){cloudError('Impossible de modifier le collaborateur',error);return}employees=employees.map(x=>x.id===id?{...x,...v}:x);save('employees',employees);refresh();cloudStatus('Collaborateur modifié.','success')};
-  window.shiftPilotCloudUpdateShift=async function(id,v){if(!await requireCloud())return;const {error}=await client.from('Shifts').update({shift_date:v.date,start_time:v.start,end_time:v.end}).eq('id',id).eq('organization_id',window.shiftPilotOrgId);if(error){cloudError('Impossible de modifier le service',error);return}shifts=shifts.map(x=>x.id===id?{...x,...v}:x);save('shifts',shifts);refresh();cloudStatus('Service modifié.','success')};
-  window.shiftPilotCloudUpdateAbsence=async function(id,v){if(!await requireCloud())return;const {error}=await client.from('Absences').update({reason:v.reason,start_date:v.start,end_date:v.end}).eq('id',id).eq('organization_id',window.shiftPilotOrgId);if(error){cloudError('Impossible de modifier l’absence',error);return}absences=absences.map(x=>x.id===id?{...x,...v}:x);save('absences',absences);refresh();cloudStatus('Absence modifiée.','success')};
+   window.shiftPilotCloudUpdateEmployee=async function(id,v){if(!await requireCloud())return;const {data,error}=await client.from('Employées').update({name:v.name,job_title:v.role,hourly_rate:v.rate}).eq('id',id).eq('organization_id',window.shiftPilotOrgId).select('id').maybeSingle();if(error){cloudError('Impossible de modifier le collaborateur',error);return}if(!data){cloudStatus('Modification refusée : vous ne disposez pas des droits nécessaires.','error');return}employees=employees.map(x=>x.id===id?{...x,...v}:x);save('employees',employees);refresh();cloudStatus('Collaborateur modifié.','success')};
+  window.shiftPilotCloudUpdateShift=async function(id,v){if(!await requireCloud())return;const {data,error}=await client.from('Shifts').update({shift_date:v.date,start_time:v.start,end_time:v.end}).eq('id',id).eq('organization_id',window.shiftPilotOrgId).select('id').maybeSingle();if(error){cloudError('Impossible de modifier le service',error);return}if(!data){cloudStatus('Modification refusée : vous ne disposez pas des droits nécessaires.','error');return}shifts=shifts.map(x=>x.id===id?{...x,...v}:x);save('shifts',shifts);refresh();cloudStatus('Service modifié.','success')};
+  window.shiftPilotCloudUpdateAbsence=async function(id,v){if(!await requireCloud())return;const {data,error}=await client.from('Absences').update({reason:v.reason,start_date:v.start,end_date:v.end}).eq('id',id).eq('organization_id',window.shiftPilotOrgId).select('id').maybeSingle();if(error){cloudError('Impossible de modifier l’absence',error);return}if(!data){cloudStatus('Modification refusée : vous ne disposez pas des droits nécessaires.','error');return}absences=absences.map(x=>x.id===id?{...x,...v}:x);save('absences',absences);refresh();cloudStatus('Absence modifiée.','success')};
   window.shiftPilotCloudDeleteShift=async function(id){
   if(!await requireCloud())return;if(!confirm("Supprimer ce service ?"))return;
   const {error}=await client.from("Shifts").delete().eq("id",id).eq("organization_id",window.shiftPilotOrgId);if(error){cloudError("Impossible de supprimer le service",error);return}
