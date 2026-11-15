@@ -391,7 +391,7 @@ refresh();
  window.shiftPilotCloudSaveShift=async function(){
   if(!await requireCloud())return;
   const employee=document.getElementById("shiftEmployee").value,date=document.getElementById("shiftDate").value,start=document.getElementById("shiftStart").value,end=document.getElementById("shiftEnd").value;
-  if(!employee||!validISODate(date)||!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(start)||!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(end)){cloudStatus("Vérifiez le collaborateur, la date et les horaires du service.","error");return}
+  if(!employee||!validISODate(date)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(start)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(end)){cloudStatus("Vérifiez le collaborateur, la date et les horaires du service.","error");return}
   if(end===start){cloudStatus("L’heure de début et de fin ne peuvent pas être identiques.","error");return}
   const {data,error}=await client.from("Shifts").insert({organization_id:window.shiftPilotOrgId,employee_id:employee,shift_date:date,start_time:start,end_time:end}).select("id,employee_id,shift_date,start_time,end_time").single();
   if(error){cloudError("Impossible d’enregistrer le service",error);return}
