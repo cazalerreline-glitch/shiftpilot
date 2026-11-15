@@ -391,7 +391,7 @@ refresh();
  window.shiftPilotCloudSaveShift=async function(){
   if(!await requireCloud())return;
   const employee=document.getElementById("shiftEmployee").value,date=document.getElementById("shiftDate").value,start=document.getElementById("shiftStart").value,end=document.getElementById("shiftEnd").value;
-  if(!employee||!date||!start||!end){cloudStatus("Complétez tous les champs du service.","error");return}
+  if(!employee||!validISODate(date)||!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(start)||!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(end)){cloudStatus("Vérifiez le collaborateur, la date et les horaires du service.","error");return}
   if(end===start){cloudStatus("L’heure de début et de fin ne peuvent pas être identiques.","error");return}
   const {data,error}=await client.from("Shifts").insert({organization_id:window.shiftPilotOrgId,employee_id:employee,shift_date:date,start_time:start,end_time:end}).select("id,employee_id,shift_date,start_time,end_time").single();
   if(error){cloudError("Impossible d’enregistrer le service",error);return}
@@ -401,7 +401,7 @@ refresh();
  window.shiftPilotCloudSaveAbsence=async function(){
   if(!await requireCloud())return;
   const employee=document.getElementById("absEmployee").value,reason=document.getElementById("absReason").value,start=document.getElementById("absStart").value,end=document.getElementById("absEnd").value;
-  if(!employee||!start||!end){cloudStatus("Complétez tous les champs de l’absence.","error");return}
+  if(!employee||!reason.trim()||!validISODate(start)||!validISODate(end)){cloudStatus("Vérifiez le collaborateur, le motif et les dates de l’absence.","error");return}
   if(end<start){cloudStatus("La date de fin doit être après la date de début.","error");return}
   const {data,error}=await client.from("Absences").insert({organization_id:window.shiftPilotOrgId,employee_id:employee,reason,start_date:start,end_date:end,status:"pending"}).select("id,employee_id,reason,start_date,end_date,status").single();
   if(error){cloudError("Impossible d’enregistrer l’absence",error);return}
