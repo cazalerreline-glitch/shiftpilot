@@ -233,6 +233,7 @@ function refresh(){
  $("statHours").textContent=shifts.reduce((n,s)=>n+hours(s),0).toFixed(1)+" h";
  $("homeTeam").innerHTML=employees.length?employees.slice(-4).map(e=>rowPerson(e)).join(""):"Ajoutez votre premier collaborateur.";
  const canManageEmployees=["owner","admin"].includes(window.shiftPilotRole||"owner");
+ const canManageAbsences=["owner","admin","manager"].includes(window.shiftPilotRole||"");
  $("teamList").innerHTML=employees.length?employees.map(e=>rowPerson(e,canManageEmployees)).join(""):"Aucun collaborateur pour le moment.";
  const now=new Date(),weekStart=new Date(now);weekStart.setDate(now.getDate()-((now.getDay()+6)%7));weekStart.setHours(0,0,0,0);const weekEnd=new Date(weekStart);weekEnd.setDate(weekStart.getDate()+6);const localISO=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");const weekStartISO=localISO(weekStart),weekEndISO=localISO(weekEnd);const weekShifts=shifts.filter(s=>s.date>=weekStartISO&&s.date<=weekEndISO).sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start));$("homeShifts").innerHTML=weekShifts.length?weekShifts.map(shiftRow).join(""):"Aucun service cette semaine.";
  $("shiftList").innerHTML=shifts.length?[...shifts].sort((a,b)=>a.date.localeCompare(b.date)).map(shiftRow).join(""):"Aucun service planifié.";
