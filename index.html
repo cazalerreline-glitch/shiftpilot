@@ -535,7 +535,9 @@ refresh();
   if(password.length<8){message("Le mot de passe doit contenir au moins 8 caractères.","error");return}
   if(password!==confirmation){message("Les deux mots de passe ne correspondent pas.","error");return}
   const btn=resetForm.querySelector("button[type=submit]");btn.disabled=true;btn.textContent="Enregistrement…";
-  const {error}=await client.auth.updateUser({password});
+  const {data:{user:currentUser}}=await client.auth.getUser();
+  const updatedMetadata={...(currentUser?.user_metadata||{}),shiftpilot_invited:false};
+  const {error}=await client.auth.updateUser({password,data:updatedMetadata});
   if(error)message("Impossible de modifier le mot de passe : "+error.message,"error");
   else{
    await client.auth.signOut();
@@ -606,6 +608,13 @@ refresh();
    loginForm.hidden=true;signupForm.hidden=true;resetRequestForm.hidden=true;resetForm.hidden=false;
    loginTab.classList.remove("active");signupTab.classList.remove("active");
    message("Choisissez votre nouveau mot de passe.","success");
+   return;
+  }
+  if(event==="SIGNED_IN"&&session?.user?.user_metadata?.shiftpilot_invited){
+   authScreen.style.display="flex";app.style.display="none";
+   loginForm.hidden=true;signupForm.hidden=true;resetRequestForm.hidden=true;resetForm.hidden=false;
+   loginTab.classList.remove("active");signupTab.classList.remove("active");
+   message("Bienvenue sur ShiftPilot. Choisissez un mot de passe pour activer votre compte.","success");
    return;
   }
   showApp(session);
