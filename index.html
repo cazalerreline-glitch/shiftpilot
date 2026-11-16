@@ -162,14 +162,20 @@ form{margin-top:15px}
  <div class="card"><div id="teamList" class="empty">Aucun collaborateur pour le moment.</div></div>
  <div class="card" id="inviteCard" hidden>
   <div class="panel-title">Inviter un collaborateur</div>
-  <p class="sub">Envoyez un lien sécurisé à l’adresse e-mail du collaborateur pour qu’il active son compte ShiftPilot.</p>
+  <p class="sub">Créez un lien d’activation personnel à transmettre au collaborateur par message.</p>
   <form id="inviteForm">
    <label for="inviteEmployee">Fiche du collaborateur</label>
    <select id="inviteEmployee" required><option value="">Choisir un collaborateur sans compte</option></select>
    <label for="inviteEmail">Adresse e-mail</label>
    <input id="inviteEmail" type="email" autocomplete="email" required placeholder="collaborateur@exemple.fr">
-   <button class="action" id="inviteSubmit" type="submit">Envoyer l’invitation</button>
+   <button class="action" id="inviteSubmit" type="submit">Créer le lien d’activation</button>
   </form>
+  <div id="inviteResult" hidden style="margin-top:14px">
+   <label for="inviteLink">Lien personnel à transmettre au collaborateur</label>
+   <input id="inviteLink" type="text" readonly>
+   <button class="secondary" id="copyInviteLink" type="button">Copier le lien</button>
+   <p class="sub">Ce lien permet d’activer ce compte. Transmettez-le uniquement à la personne concernée.</p>
+  </div>
  </div>
 </section>
 
@@ -402,13 +408,21 @@ refresh();
   btn.disabled=true;btn.textContent="Envoi…";
   const {data,error}=await client.functions.invoke("invite-employee",{body:{organization_id:window.shiftPilotOrgId,employee_id:employeeId,email}});
   if(error||data?.error){
-   cloudStatus(data?.error||"Impossible d’envoyer l’invitation. Réessayez.","error");
+   cloudStatus(data?.error||"Impossible de créer le lien d’activation. Réessayez.","error");
   }else{
    employees=employees.map(x=>x.id===employeeId?{...x,userId:data.invited_user_id||"invited"}:x);
    save("employees",employees);document.getElementById("inviteForm").reset();refresh();
-   cloudStatus(data.message||"Invitation envoyée.","success");
+   document.getElementById("inviteLink").value=data.invite_url||"";
+   document.getElementById("inviteResult").hidden=!data.invite_url;
+   cloudStatus(data.message||"Lien d’activation créé.","success");
   }
-  btn.disabled=false;btn.textContent="Envoyer l’invitation";
+  btn.disabled=false;btn.textContent="Créer le lien d’activation";
+ });
+ document.getElementById("copyInviteLink")?.addEventListener("click",async()=>{
+  const input=document.getElementById("inviteLink");
+  if(!input?.value)return;
+  try{await navigator.clipboard.writeText(input.value);cloudStatus("Lien copié. Vous pouvez le coller dans un message.","success")}
+  catch(error){input.focus();input.select();cloudStatus("Sélectionnez le lien puis choisissez Copier.","info")}
  });
  async function loadSupportTickets(){
   const list=document.getElementById("supportList");
