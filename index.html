@@ -133,6 +133,7 @@ form{margin-top:15px}
  <button data-page="absence">Absences</button>
  <button data-page="costs">Coûts</button>
  <button data-page="support">Assistance</button>
+ <button data-page="subscription">Abonnement</button>
 </nav>
 <main>
 <div id="cloud-status" role="status" aria-live="polite" style="display:none;margin:0 0 14px;padding:12px 14px;border-radius:11px;font-size:12px;line-height:1.5"></div>
@@ -228,6 +229,17 @@ form{margin-top:15px}
  </div>
  <div class="card"><div class="panel-title">Mes demandes</div><div id="supportList" class="empty">Aucune demande pour le moment.</div></div>
 </section>
+<section id="subscription" class="section">
+ <div class="heading"><div><h2>Mon abonnement</h2><div class="sub">Gérez l’accès à ShiftPilot pour votre établissement</div></div></div>
+ <div class="card">
+  <div class="panel-title">ShiftPilot – Essentiel</div>
+  <div class="stat-number">29,90 € <span style="font-size:13px;font-weight:600;color:#8992a5">/ mois</span></div>
+  <p class="sub">Gestion des collaborateurs, plannings, absences et suivi des coûts du personnel.</p>
+  <div id="subscriptionStatus" role="status" style="margin:14px 0;padding:12px;border-radius:10px;background:#f4f6fa;font-size:13px">Vérification de votre abonnement…</div>
+  <button class="action" id="subscribeButton" type="button">S’abonner à Essentiel</button>
+  <p class="sub">Paiement sécurisé par Stripe. Vous serez redirigé vers leur page de paiement.</p>
+ </div>
+</section>
 <div class="footer">SHIFTPILOT · Votre équipe, mieux organisée.</div>
 </main>
 <script>
@@ -310,7 +322,7 @@ refresh();
  }
  function cloudError(label,error){console.error(label,error);cloudStatus(label+(error&&error.message?" : "+error.message:""),"error")}
  function lockManagementUI(){
-  ["#team .heading button","#planning .heading button.action","#absence .heading button.action",'nav button[data-page="costs"]',"#inviteCard"].forEach(selector=>{
+  ["#team .heading button","#planning .heading button.action","#absence .heading button.action",'nav button[data-page="costs"]',"#inviteCard",'nav button[data-page="subscription"]'].forEach(selector=>{
    const el=document.querySelector(selector);if(el)el.hidden=true;
   });
  }
@@ -349,6 +361,8 @@ refresh();
    if(absenceAddButton)absenceAddButton.hidden=!canManageTeam;
    const costsNav=document.querySelector('nav button[data-page="costs"]');
    if(costsNav)costsNav.hidden=role==="employee";
+   const subscriptionNav=document.querySelector('nav button[data-page="subscription"]');
+   if(subscriptionNav)subscriptionNav.hidden=!canManageEmployees;
    const localEmployees=JSON.parse(localStorage.getItem("shiftpilot_employees")||"[]");
    const localShifts=JSON.parse(localStorage.getItem("shiftpilot_shifts")||"[]");
    const localAbsences=JSON.parse(localStorage.getItem("shiftpilot_absences")||"[]");
@@ -396,6 +410,7 @@ refresh();
    const title=document.querySelector(".welcome p");if(title)title.textContent=org.name+" · Données synchronisées";
    cloudStatus("Votre espace « "+org.name+" » est synchronisé. Vos données sont enregistrées en ligne.","success");
    await loadSupportTickets();
+   await loadSubscription();
   }catch(error){window.shiftPilotCloudReady=false;cloudError("La synchronisation a échoué",error)}
  }
  document.getElementById("inviteForm")?.addEventListener("submit",async e=>{
@@ -448,6 +463,34 @@ refresh();
   if(error){cloudError("Impossible d’envoyer votre demande",error)}
   else{document.getElementById("supportForm").reset();await loadSupportTickets();cloudStatus("Votre demande a bien été envoyée à l’assistance ShiftPilot.","success")}
   btn.disabled=false;btn.textContent="Envoyer ma demande";
+ });
+ async function loadSubscription(){
+  const status=document.getElementById("subscriptionStatus");
+  const button=document.getElementById("subscribeButton");
+  if(!status||!button||!window.shiftPilotOrgId||!["owner","admin"].includes(window.shiftPilotRole||""))return;
+  status.textContent="Vérification de votre abonnement…";
+  const {data,error}=await client.from("Subscriptions").select("status,current_period_end,cancel_at_period_end").eq("organization_id",window.shiftPilotOrgId).maybeSingle();
+  if(error){status.textContent="Impossible de vérifier l’abonnement pour le moment.";console.error("Subscription status",error);return}
+  if(!data){
+   status.textContent="Aucun abonnement actif pour cet établissement.";
+   button.disabled=false;button.textContent="S’abonner à Essentiel";return;
+  }
+  const labels={active:"Abonnement actif",trialing:"Période d’essai en cours",past_due:"Paiement à régulariser",incomplete:"Paiement en attente",canceled:"Abonnement résilié",unpaid:"Paiement impayé",paused:"Abonnement en pause",incomplete_expired:"Paiement expiré"};
+  const label=labels[data.status]||"Statut : "+data.status;
+  const end=data.current_period_end?new Date(data.current_period_end).toLocaleDateString("fr-FR"):"";
+  status.textContent=label+(end?" · échéance : "+end:"")+(data.cancel_at_period_end?" · résiliation prévue à l’échéance":"");
+  const locked=["active","trialing","past_due","incomplete"].includes(data.status);
+  button.disabled=locked;
+  button.textContent=locked?"Abonnement déjà enregistré":"S’abonner à Essentiel";
+ }
+ document.getElementById("subscribeButton")?.addEventListener("click",async()=>{
+  if(!await requireCloud())return;
+  if(!["owner","admin"].includes(window.shiftPilotRole||"")){cloudStatus("Seuls le propriétaire et les administrateurs peuvent souscrire un abonnement.","error");return}
+  const button=document.getElementById("subscribeButton");button.disabled=true;button.textContent="Préparation du paiement…";
+  const {data,error}=await client.functions.invoke("create-checkout-session",{body:{organization_id:window.shiftPilotOrgId}});
+  if(error||data?.error){cloudStatus(data?.error||"Impossible de préparer le paiement. Réessayez.","error");button.disabled=false;button.textContent="S’abonner à Essentiel";return}
+  if(!data?.url){cloudStatus("Stripe n’a pas renvoyé de lien de paiement. Réessayez.","error");button.disabled=false;button.textContent="S’abonner à Essentiel";return}
+  window.location.href=data.url;
  });
  async function requireCloud(){
   if(!window.shiftPilotCloudReady||!window.shiftPilotOrgId){cloudStatus("La synchronisation est encore en cours. Réessayez dans quelques secondes.","error");return false}
