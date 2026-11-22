@@ -387,6 +387,10 @@ refresh();
    cloudStatus("Votre espace « "+org.name+" » est synchronisé. Vos données sont enregistrées en ligne.","success");
    await loadSupportTickets();
    await loadSubscription();
+   if(window.shiftPilotSubscriptionAccess===false){
+    const subscriptionTab=document.querySelector('nav button[data-page="subscription"]');
+    if(subscriptionTab)subscriptionTab.click();
+   }
   }catch(error){window.shiftPilotCloudReady=false;cloudError("La synchronisation a échoué",error)}
  }
  document.getElementById("inviteForm")?.addEventListener("submit",async e=>{
@@ -586,12 +590,12 @@ refresh();
   const user=session&&session.user;
   if(!user){
    authScreen.style.display="flex";app.style.display="none";
-   window.shiftPilotLoadedUser=null;window.shiftPilotOrgId=null;window.shiftPilotCloudReady=false;window.shiftPilotRole=null;lockManagementUI();
+   window.shiftPilotLoadedUser=null;window.shiftPilotOrgId=null;window.shiftPilotCloudReady=false;window.shiftPilotRole=null;window.shiftPilotSubscriptionAccess=null;lockManagementUI();
    employees=[];shifts=[];absences=[];refresh();cloudStatus("","info");return;
   }
   authScreen.style.display="none";app.style.display="block";
   if(window.shiftPilotLoadedUser!==user.id){
-   window.shiftPilotLoadedUser=user.id;window.shiftPilotRole=null;lockManagementUI();employees=[];shifts=[];absences=[];refresh();loadCloudData(user);
+   window.shiftPilotLoadedUser=user.id;window.shiftPilotRole=null;window.shiftPilotSubscriptionAccess=null;lockManagementUI();employees=[];shifts=[];absences=[];refresh();loadCloudData(user);
   }
   const meta=user.user_metadata||{};
   const name=meta.full_name||"";
