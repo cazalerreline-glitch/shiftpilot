@@ -243,8 +243,9 @@ form{margin-top:15px}
 <div class="footer">SHIFTPILOT · Votre équipe, mieux organisée.</div>
 </main>
 <script>
-const get=(key)=>JSON.parse(localStorage.getItem("shiftpilot_"+key)||"[]");
-const save=(key,data)=>localStorage.setItem("shiftpilot_"+key,JSON.stringify(data));
+// Les caches locaux sont strictement isolés par établissement. Les anciennes clés globales ne sont jamais relues ni importées.
+const get=(key)=>[];
+const save=(key,data)=>{const orgId=window.shiftPilotOrgId;if(!orgId)return;localStorage.setItem("shiftpilot_cache_"+orgId+"_"+key,JSON.stringify(data))};
 let employees=get("employees"),shifts=get("shifts"),absences=get("absences");
 const $=id=>document.getElementById(id);
 function toggleForm(id){$(id).hidden=!$(id).hidden}
@@ -286,7 +287,13 @@ function editAbs(id){const a=absences.find(x=>x.id===id);if(!a)return;const reas
 function removeEmployee(id){if(window.shiftPilotCloudDeleteEmployee){window.shiftPilotCloudDeleteEmployee(id);return}if(!confirm("Supprimer ce collaborateur ?"))return;employees=employees.filter(e=>e.id!==id);save("employees",employees);refresh()}
 function removeShift(id){if(window.shiftPilotCloudDeleteShift){window.shiftPilotCloudDeleteShift(id);return}shifts=shifts.filter(s=>s.id!==id);save("shifts",shifts);refresh()}
 function removeAbs(id){if(window.shiftPilotCloudDeleteAbsence){window.shiftPilotCloudDeleteAbsence(id);return}absences=absences.filter(a=>a.id!==id);save("absences",absences);refresh()}
-document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".section").forEach(x=>x.classList.remove("active"));b.classList.add("active");$(b.dataset.page).classList.add("active")}));
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
+ if(b.dataset.page!=="subscription"&&b.dataset.page!=="support"&&window.shiftPilotSubscriptionAccess===false){
+  const subscriptionTab=document.querySelector('nav button[data-page="subscription"]');
+  if(subscriptionTab&&b!==subscriptionTab){document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".section").forEach(x=>x.classList.remove("active"));subscriptionTab.classList.add("active");$("subscription").classList.add("active");return}
+ }
+ document.querySelectorAll("nav button").forEach(x=>x.classList.remove("active"));document.querySelectorAll(".section").forEach(x=>x.classList.remove("active"));b.classList.add("active");$(b.dataset.page).classList.add("active")
+}));
 $("addEmployee").addEventListener("submit",e=>{e.preventDefault();if(window.shiftPilotCloudSaveEmployee){window.shiftPilotCloudSaveEmployee();return}employees.push({id:crypto.randomUUID(),name:$("empName").value.trim(),role:$("empRole").value,rate:Number($("empRate").value),userId:null});save("employees",employees);e.target.reset();$("employeeForm").hidden=true;refresh()});
 $("addShift").addEventListener("submit",e=>{e.preventDefault();if(window.shiftPilotCloudSaveShift){window.shiftPilotCloudSaveShift();return}let start=$("shiftStart").value,end=$("shiftEnd").value;const candidate={employee:$("shiftEmployee").value,date:$("shiftDate").value,start,end};if(end===start){alert("L’heure de début et de fin ne peuvent pas être identiques.");return}if(!validISODate(candidate.date)){alert("Vérifiez la date du service.");return}if(hasShiftConflict(candidate)){alert("Ce collaborateur a déjà un service qui chevauche cet horaire.");return}shifts.push({id:crypto.randomUUID(),...candidate});save("shifts",shifts);e.target.reset();$("shiftForm").hidden=true;refresh()});
 $("addAbsence").addEventListener("submit",e=>{e.preventDefault();if(window.shiftPilotCloudSaveAbsence){window.shiftPilotCloudSaveAbsence();return}let start=$("absStart").value,end=$("absEnd").value,reason=$("absReason").value;if(!reason.trim()||!validISODate(start)||!validISODate(end)){alert("Vérifiez la catégorie et les dates de l’absence.");return}if(end<start){alert("La date de fin doit être après la date de début.");return}absences.push({id:crypto.randomUUID(),employee:$("absEmployee").value,reason,start,end});save("absences",absences);e.target.reset();$("absenceForm").hidden=true;refresh()});
@@ -362,39 +369,8 @@ refresh();
    const costsNav=document.querySelector('nav button[data-page="costs"]');
    if(costsNav)costsNav.hidden=role==="employee";
    const subscriptionNav=document.querySelector('nav button[data-page="subscription"]');
-   if(subscriptionNav)subscriptionNav.hidden=!canManageEmployees;
-   const localEmployees=JSON.parse(localStorage.getItem("shiftpilot_employees")||"[]");
-   const localShifts=JSON.parse(localStorage.getItem("shiftpilot_shifts")||"[]");
-   const localAbsences=JSON.parse(localStorage.getItem("shiftpilot_absences")||"[]");
-   const marker="shiftpilot_cloud_migrated_"+user.id;
-   const [er,sr,ar]=await Promise.all([
-    client.from("Employées").select("id,name,job_title,hourly_rate,user_id").eq("organization_id",org.id),
-    client.from("Shifts").select("id,employee_id,shift_date,start_time,end_time").eq("organization_id",org.id),
-    client.from("Absences").select("id,employee_id,reason,start_date,end_date,status").eq("organization_id",org.id)
-   ]);
-   if(er.error)throw er.error;if(sr.error)throw sr.error;if(ar.error)throw ar.error;
-   if(!localStorage.getItem(marker)){
-    const knownEmployeeIds=new Set((er.data||[]).map(x=>x.id));
-    const missingEmployees=localEmployees.filter(x=>!knownEmployeeIds.has(x.id));
-    if(missingEmployees.length){
-     const rows=missingEmployees.map(x=>({id:x.id,organization_id:org.id,user_id:null,name:x.name||"Collaborateur",job_title:x.role||"Autre",hourly_rate:Number(x.rate)||0}));
-     const saved=await client.from("Employées").insert(rows);if(saved.error)throw saved.error;
-     missingEmployees.forEach(x=>knownEmployeeIds.add(x.id));
-    }
-    const knownShiftIds=new Set((sr.data||[]).map(x=>x.id));
-    const missingShifts=localShifts.filter(x=>knownShiftIds.has(x.id)===false&&knownEmployeeIds.has(x.employee));
-    if(missingShifts.length){
-     const rows=missingShifts.map(x=>({id:x.id,organization_id:org.id,employee_id:x.employee,shift_date:x.date,start_time:x.start,end_time:x.end}));
-     const saved=await client.from("Shifts").insert(rows);if(saved.error)throw saved.error;
-    }
-    const knownAbsenceIds=new Set((ar.data||[]).map(x=>x.id));
-    const missingAbsences=localAbsences.filter(x=>!knownAbsenceIds.has(x.id)&&knownEmployeeIds.has(x.employee));
-    if(missingAbsences.length){
-     const rows=missingAbsences.map(x=>({id:x.id,organization_id:org.id,employee_id:x.employee,reason:x.reason||"Autre",start_date:x.start,end_date:x.end,status:x.status||"pending"}));
-     const saved=await client.from("Absences").insert(rows);if(saved.error)throw saved.error;
-    }
-    localStorage.setItem(marker,"1");
-   }
+   if(subscriptionNav)subscriptionNav.hidden=false;
+   // Les anciennes données locales globales ne sont volontairement pas importées : elles ne portent aucun identifiant d'établissement fiable.
    const [employeesResult,shiftsResult,absencesResult]=await Promise.all([
     client.from("Employées").select("id,name,job_title,hourly_rate,user_id").eq("organization_id",org.id).order("created_at",{ascending:true}),
     client.from("Shifts").select("id,employee_id,shift_date,start_time,end_time").eq("organization_id",org.id).order("shift_date",{ascending:true}),
@@ -411,6 +387,10 @@ refresh();
    cloudStatus("Votre espace « "+org.name+" » est synchronisé. Vos données sont enregistrées en ligne.","success");
    await loadSupportTickets();
    await loadSubscription();
+   if(window.shiftPilotSubscriptionAccess===false){
+    const subscriptionTab=document.querySelector('nav button[data-page="subscription"]');
+    if(subscriptionTab)subscriptionTab.click();
+   }
   }catch(error){window.shiftPilotCloudReady=false;cloudError("La synchronisation a échoué",error)}
  }
  document.getElementById("inviteForm")?.addEventListener("submit",async e=>{
@@ -453,7 +433,7 @@ refresh();
  }
  document.getElementById("supportForm")?.addEventListener("submit",async e=>{
   e.preventDefault();
-  if(!await requireCloud())return;
+  if(!await requireCloud(true))return;
   const subject=document.getElementById("supportSubject").value.trim();
   const messageText=document.getElementById("supportMessage").value.trim();
   if(subject.length<4||messageText.length<10){cloudStatus("Le sujet doit contenir 4 caractères et le message au moins 10 caractères.","error");return}
@@ -467,24 +447,34 @@ refresh();
  async function loadSubscription(){
   const status=document.getElementById("subscriptionStatus");
   const button=document.getElementById("subscribeButton");
-  if(!status||!button||!window.shiftPilotOrgId||!["owner","admin"].includes(window.shiftPilotRole||""))return;
+  if(!status||!button||!window.shiftPilotOrgId)return;
+  window.shiftPilotSubscriptionAccess=false;
+  if(!["owner","admin"].includes(window.shiftPilotRole||"")){
+   status.textContent="L’accès à ShiftPilot dépend de l’abonnement de votre établissement. Contactez son propriétaire ou un administrateur.";
+   button.hidden=true;
+   return;
+  }
+  button.hidden=false;
   status.textContent="Vérification de votre abonnement…";
   const {data,error}=await client.from("Subscriptions").select("status,current_period_end,cancel_at_period_end").eq("organization_id",window.shiftPilotOrgId).maybeSingle();
-  if(error){status.textContent="Impossible de vérifier l’abonnement pour le moment.";console.error("Subscription status",error);return}
+  if(error){window.shiftPilotSubscriptionAccess=false;status.textContent="Impossible de vérifier l’abonnement. L’accès aux fonctions de gestion reste bloqué par sécurité. Réessayez plus tard.";console.error("Subscription status",error);return}
   if(!data){
-   status.textContent="Aucun abonnement actif pour cet établissement.";
+   window.shiftPilotSubscriptionAccess=false;
+   status.textContent="Aucun abonnement actif pour cet établissement. Souscrivez à Essentiel pour utiliser les fonctions de gestion.";
    button.disabled=false;button.textContent="S’abonner à Essentiel";return;
   }
   const labels={active:"Abonnement actif",trialing:"Période d’essai en cours",past_due:"Paiement à régulariser",incomplete:"Paiement en attente",canceled:"Abonnement résilié",unpaid:"Paiement impayé",paused:"Abonnement en pause",incomplete_expired:"Paiement expiré"};
   const label=labels[data.status]||"Statut : "+data.status;
   const end=data.current_period_end?new Date(data.current_period_end).toLocaleDateString("fr-FR"):"";
   status.textContent=label+(end?" · échéance : "+end:"")+(data.cancel_at_period_end?" · résiliation prévue à l’échéance":"");
-  const locked=["active","trialing","past_due","incomplete"].includes(data.status);
-  button.disabled=locked;
-  button.textContent=locked?"Abonnement déjà enregistré":"S’abonner à Essentiel";
+  const periodStillOpen=data.current_period_end&&new Date(data.current_period_end).getTime()>Date.now();
+  window.shiftPilotSubscriptionAccess=["active","trialing"].includes(data.status)||(data.status==="past_due"&&Boolean(periodStillOpen));
+  button.disabled=["active","trialing","past_due","incomplete"].includes(data.status);
+  button.textContent=button.disabled?"Abonnement déjà enregistré":"S’abonner à Essentiel";
+  if(!window.shiftPilotSubscriptionAccess&&data.status==="past_due")status.textContent+=" · Accès suspendu jusqu’à régularisation.";
  }
  document.getElementById("subscribeButton")?.addEventListener("click",async()=>{
-  if(!await requireCloud())return;
+  if(!await requireCloud(true))return;
   if(!["owner","admin"].includes(window.shiftPilotRole||"")){cloudStatus("Seuls le propriétaire et les administrateurs peuvent souscrire un abonnement.","error");return}
   const button=document.getElementById("subscribeButton");button.disabled=true;button.textContent="Préparation du paiement…";
   const {data,error}=await client.functions.invoke("create-checkout-session",{body:{organization_id:window.shiftPilotOrgId}});
@@ -492,8 +482,14 @@ refresh();
   if(!data?.url){cloudStatus("Stripe n’a pas renvoyé de lien de paiement. Réessayez.","error");button.disabled=false;button.textContent="S’abonner à Essentiel";return}
   window.location.href=data.url;
  });
- async function requireCloud(){
+ async function requireCloud(allowWithoutSubscription=false){
   if(!window.shiftPilotCloudReady||!window.shiftPilotOrgId){cloudStatus("La synchronisation est encore en cours. Réessayez dans quelques secondes.","error");return false}
+  if(!allowWithoutSubscription&&window.shiftPilotSubscriptionAccess!==true){
+   cloudStatus("Un abonnement actif est nécessaire pour utiliser cette fonction. Ouvrez l’onglet Abonnement ou contactez le propriétaire de l’établissement.","error");
+   const tab=document.querySelector('nav button[data-page="subscription"]');
+   if(tab)tab.click();
+   return false;
+  }
   return true;
  }
  window.shiftPilotCloudSaveEmployee=async function(){
@@ -594,12 +590,12 @@ refresh();
   const user=session&&session.user;
   if(!user){
    authScreen.style.display="flex";app.style.display="none";
-   window.shiftPilotLoadedUser=null;window.shiftPilotOrgId=null;window.shiftPilotCloudReady=false;window.shiftPilotRole=null;lockManagementUI();
+   window.shiftPilotLoadedUser=null;window.shiftPilotOrgId=null;window.shiftPilotCloudReady=false;window.shiftPilotRole=null;window.shiftPilotSubscriptionAccess=null;lockManagementUI();
    employees=[];shifts=[];absences=[];refresh();cloudStatus("","info");return;
   }
   authScreen.style.display="none";app.style.display="block";
   if(window.shiftPilotLoadedUser!==user.id){
-   window.shiftPilotLoadedUser=user.id;window.shiftPilotRole=null;lockManagementUI();employees=[];shifts=[];absences=[];refresh();loadCloudData(user);
+   window.shiftPilotLoadedUser=user.id;window.shiftPilotRole=null;window.shiftPilotSubscriptionAccess=null;lockManagementUI();employees=[];shifts=[];absences=[];refresh();loadCloudData(user);
   }
   const meta=user.user_metadata||{};
   const name=meta.full_name||"";
