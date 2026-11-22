@@ -3,6 +3,58 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const APP_URL = "https://cazalerreline-glitch.github.io/shiftpilot/";
 const APP_ORIGIN = "https://cazalerreline-glitch.github.io";
 const STRIPE_PRICE_ID = "price_1UYd1pQy4VpzdvFnpHyA1Azm";
+
+async function stripeApi(path: string, method: "GET" | "POST", stripeKey: string, params?: URLSearchParams) {
+  const response = await fetch("https://api.stripe.com/v1/" + path, {
+    method,
+    headers: {
+      "Authorization": "Bearer " + stripeKey,
+      ...(method === "POST" ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
+    },
+    ...(method === "POST" && params ? { body: params } : {}),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error("Stripe API " + path + ": " + (data?.error?.message || data?.error?.code || "unknown error"));
+  }
+  return data;
+}
+
+async function resolveStripePrice(stripeKey: string): Promise<string> {
+  const existingResponse = await fetch("https://api.stripe.com/v1/prices/" + STRIPE_PRICE_ID, {
+    headers: { "Authorization": "Bearer " + stripeKey },
+  });
+  const existingPrice = await existingResponse.json();
+  if (existingResponse.ok && existingPrice.active) return existingPrice.id;
+  if (!existingResponse.ok && existingPrice?.error?.code !== "resource_missing") {
+    throw new Error("Stripe price lookup: " + (existingPrice?.error?.message || existingPrice?.error?.code || "unknown error"));
+  }
+
+  const products = await stripeApi("products?active=true&limit=100", "GET", stripeKey);
+  let product = products.data?.find((item: any) => item.name === "ShiftPilot – Essentiel");
+  if (!product) {
+    const productParams = new URLSearchParams();
+    productParams.set("name", "ShiftPilot – Essentiel");
+    productParams.set("description", "Solution de gestion pour hôtels et restaurants : gestion des collaborateurs, plannings, absences et suivi des coûts du personnel.");
+    product = await stripeApi("products", "POST", stripeKey, productParams);
+  }
+
+  const prices = await stripeApi("prices?product=" + encodeURIComponent(product.id) + "&active=true&limit=100", "GET", stripeKey);
+  let price = prices.data?.find((item: any) =>
+    item.currency === "eur" &&
+    item.unit_amount === 2990 &&
+    item.recurring?.interval === "month"
+  );
+  if (!price) {
+    const priceParams = new URLSearchParams();
+    priceParams.set("product", product.id);
+    priceParams.set("currency", "eur");
+    priceParams.set("unit_amount", "2990");
+    priceParams.set("recurring[interval]", "month");
+    price = await stripeApi("prices", "POST", stripeKey, priceParams);
+  }
+  return price.id;
+}
 const corsHeaders = {
   "Access-Control-Allow-Origin": APP_ORIGIN,
   "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
@@ -75,7 +127,8 @@ Deno.serve(async (req: Request) => {
 
     const params = new URLSearchParams();
     params.set("mode", "subscription");
-    params.set("line_items[0][price]", STRIPE_PRICE_ID);
+    const stripePriceId = await resolveStripePrice(stripeKey);
+    params.set("line_items[0][price]", stripePriceId);
     params.set("line_items[0][quantity]", "1");
     params.set("success_url", APP_URL + "?checkout=success&session_id={CHECKOUT_SESSION_ID}");
     params.set("cancel_url", APP_URL + "?checkout=cancel");
@@ -102,7 +155,7 @@ Deno.serve(async (req: Request) => {
     });
     const session = await stripeResponse.json();
     if (!stripeResponse.ok || !session.url) {
-      console.error("Stripe Checkout error:", session?.error?.type || "unknown", session?.error?.code || "");
+      console.error("Stripe Checkout error:", JSON.stringify({ type: session?.error?.type, code: session?.error?.code, message: session?.error?.message, param: session?.error?.param }));
       return json({ error: "Impossible de préparer le paiement. Réessayez plus tard." }, 502);
     }
 
