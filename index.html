@@ -237,6 +237,7 @@ form{margin-top:15px}
   <p class="sub">Gestion des collaborateurs, plannings, absences et suivi des coûts du personnel.</p>
   <div id="subscriptionStatus" role="status" style="margin:14px 0;padding:12px;border-radius:10px;background:#f4f6fa;font-size:13px">Vérification de votre abonnement…</div>
   <button class="action" id="subscribeButton" type="button">S’abonner à Essentiel</button>
+  <button class="secondary" id="manageSubscriptionButton" type="button" hidden style="margin-top:10px;width:100%">Gérer mon abonnement et mes factures</button>
   <p class="sub">Paiement sécurisé par Stripe. Vous serez redirigé vers leur page de paiement.</p>
  </div>
 </section>
@@ -447,7 +448,9 @@ refresh();
  async function loadSubscription(){
   const status=document.getElementById("subscriptionStatus");
   const button=document.getElementById("subscribeButton");
+  const manageButton=document.getElementById("manageSubscriptionButton");
   if(!status||!button||!window.shiftPilotOrgId)return;
+  if(manageButton)manageButton.hidden=true;
   window.shiftPilotSubscriptionAccess=false;
   if(!["owner","admin"].includes(window.shiftPilotRole||"")){
    status.textContent="L’accès à ShiftPilot dépend de l’abonnement de votre établissement. Contactez son propriétaire ou un administrateur.";
@@ -456,13 +459,14 @@ refresh();
   }
   button.hidden=false;
   status.textContent="Vérification de votre abonnement…";
-  const {data,error}=await client.from("Subscriptions").select("status,current_period_end,cancel_at_period_end").eq("organization_id",window.shiftPilotOrgId).maybeSingle();
+  const {data,error}=await client.from("Subscriptions").select("status,current_period_end,cancel_at_period_end,stripe_customer_id").eq("organization_id",window.shiftPilotOrgId).maybeSingle();
   if(error){window.shiftPilotSubscriptionAccess=false;status.textContent="Impossible de vérifier l’abonnement. L’accès aux fonctions de gestion reste bloqué par sécurité. Réessayez plus tard.";console.error("Subscription status",error);return}
   if(!data){
    window.shiftPilotSubscriptionAccess=false;
    status.textContent="Aucun abonnement actif pour cet établissement. Souscrivez à Essentiel pour utiliser les fonctions de gestion.";
    button.disabled=false;button.textContent="S’abonner à Essentiel";return;
   }
+  if(manageButton)manageButton.hidden=!data.stripe_customer_id;
   const labels={active:"Abonnement actif",trialing:"Période d’essai en cours",past_due:"Paiement à régulariser",incomplete:"Paiement en attente",canceled:"Abonnement résilié",unpaid:"Paiement impayé",paused:"Abonnement en pause",incomplete_expired:"Paiement expiré"};
   const label=labels[data.status]||"Statut : "+data.status;
   const end=data.current_period_end?new Date(data.current_period_end).toLocaleDateString("fr-FR"):"";
@@ -473,6 +477,15 @@ refresh();
   button.textContent=button.disabled?"Abonnement déjà enregistré":"S’abonner à Essentiel";
   if(!window.shiftPilotSubscriptionAccess&&data.status==="past_due")status.textContent+=" · Accès suspendu jusqu’à régularisation.";
  }
+ document.getElementById("manageSubscriptionButton")?.addEventListener("click",async()=>{
+  if(!await requireCloud(true))return;
+  if(!["owner","admin"].includes(window.shiftPilotRole||"")){cloudStatus("Seuls le propriétaire et les administrateurs peuvent gérer l’abonnement.","error");return}
+  const button=document.getElementById("manageSubscriptionButton");button.disabled=true;button.textContent="Ouverture du portail Stripe…";
+  const {data,error}=await client.functions.invoke("create-billing-portal-session",{body:{organization_id:window.shiftPilotOrgId}});
+  if(error||data?.error){cloudStatus(data?.error||"Impossible d’ouvrir le portail de facturation. Réessayez.","error");button.disabled=false;button.textContent="Gérer mon abonnement et mes factures";return}
+  if(!data?.url){cloudStatus("Stripe n’a pas renvoyé de lien de gestion.","error");button.disabled=false;button.textContent="Gérer mon abonnement et mes factures";return}
+  window.location.href=data.url;
+ });
  document.getElementById("subscribeButton")?.addEventListener("click",async()=>{
   if(!await requireCloud(true))return;
   if(!["owner","admin"].includes(window.shiftPilotRole||"")){cloudStatus("Seuls le propriétaire et les administrateurs peuvent souscrire un abonnement.","error");return}
