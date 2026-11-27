@@ -619,7 +619,7 @@ refresh();
   }
   authScreen.style.display="none";app.style.display="block";
   if(window.shiftPilotLoadedUser!==user.id){
-   window.shiftPilotLoadedUser=user.id;window.shiftPilotRole=null;window.shiftPilotSubscriptionAccess=null;lockManagementUI();employees=[];shifts=[];absences=[];refresh();loadCloudData(user);
+   window.shiftPilotLoadedUser=user.id;window.shiftPilotRole=null;window.shiftPilotSubscriptionAccess=null;lockManagementUI();employees=[];shifts=[];absences=[];refresh();(async()=>{const {data:inviteData,error:inviteError}=await client.functions.invoke("accept-employee-invitation",{body:{}});if(inviteError){console.error("Invitation activation",inviteError);cloudStatus("Connexion réussie. Si ce compte vient d’être invité, contactez le responsable de l’établissement pour finaliser son activation.","info")}else if(inviteData?.accepted){cloudStatus("Votre compte collaborateur est activé. Bienvenue dans votre équipe !","success")}await loadCloudData(user)})();
   }
   const meta=user.user_metadata||{};
   const name=meta.full_name||"";
