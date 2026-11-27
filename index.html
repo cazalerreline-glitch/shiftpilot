@@ -53,6 +53,7 @@ form{margin-top:15px}
 .day strong{display:block;font-size:12px;margin-bottom:9px}
 .shift{background:#e6eaff;color:#4459c9;border-radius:6px;padding:5px 2px;margin:4px 0;font-size:9px;overflow-wrap:anywhere}
 .footer{text-align:center;color:#a1a9b7;font-size:11px;padding:20px}
+.help-faq{margin:0 0 16px}.help-faq details{border-top:1px solid var(--line);padding:13px 0}.help-faq details:last-child{border-bottom:1px solid var(--line)}.help-faq summary{font-size:13px;font-weight:700;cursor:pointer;color:var(--dark);list-style-position:inside}.help-faq details p{font-size:12px;line-height:1.6;color:#687386;margin:9px 0 0 21px}
 @media(min-width:700px){.stats{grid-template-columns:repeat(4,1fr)}main{padding-top:28px}.card{padding:21px}}
 
 .auth-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px 16px;background:linear-gradient(145deg,#101827,#202e4b)}
@@ -218,6 +219,16 @@ form{margin-top:15px}
 </section>
 <section id="support" class="section">
  <div class="heading"><div><h2>Centre d’assistance</h2><div class="sub">Une question ou un problème ? Envoyez-nous un message.</div></div></div>
+ <div class="card help-faq">
+  <div class="panel-title">Réponses rapides</div>
+  <p class="sub" style="margin:0 0 8px">Consultez ces conseils avant d’envoyer une demande à l’assistance.</p>
+  <details><summary>Comment ajouter un collaborateur ?</summary><p>Ouvrez « Équipe », choisissez « Ajouter », renseignez le nom, le poste et le coût horaire estimé, puis enregistrez. Cette action est réservée au propriétaire et aux administrateurs de l’établissement.</p></details>
+  <details><summary>Comment créer un service dans le planning ?</summary><p>Ouvrez « Planning », choisissez « Service », sélectionnez le collaborateur, la date et les heures, puis ajoutez le service. ShiftPilot signale les horaires qui se chevauchent pour un même collaborateur.</p></details>
+  <details><summary>Comment déclarer ou suivre une absence ?</summary><p>Ouvrez « Absences » pour déclarer une période et choisir une catégorie. Les responsables autorisés peuvent ensuite suivre et mettre à jour le statut de la demande.</p></details>
+  <details><summary>Mes données sont-elles enregistrées si je ferme le site ?</summary><p>Oui. Lorsque le bandeau indique que votre espace est synchronisé, les données sont enregistrées dans votre espace en ligne. Vous pouvez vous reconnecter depuis un autre appareil avec le même compte.</p></details>
+  <details><summary>J’ai oublié mon mot de passe, que faire ?</summary><p>Sur l’écran de connexion, choisissez « Mot de passe oublié ? », saisissez l’adresse e-mail de votre compte et suivez le lien reçu par e-mail. Pensez à vérifier les courriers indésirables.</p></details>
+  <details><summary>Comment gérer mon abonnement et mes factures ?</summary><p>Le propriétaire ou un administrateur peut ouvrir « Abonnement ». Si un abonnement Stripe est déjà associé à l’établissement, le bouton de gestion permet d’accéder à son espace de facturation.</p></details>
+ </div>
  <div class="card">
   <div class="panel-title">Contacter l’assistance ShiftPilot</div>
   <form id="supportForm">
