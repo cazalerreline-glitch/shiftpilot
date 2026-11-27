@@ -381,7 +381,7 @@ refresh();
    const costsNav=document.querySelector('nav button[data-page="costs"]');
    if(costsNav)costsNav.hidden=role==="employee";
    const subscriptionNav=document.querySelector('nav button[data-page="subscription"]');
-   if(subscriptionNav)subscriptionNav.hidden=false;
+   if(subscriptionNav)subscriptionNav.hidden=!canManageEmployees;
    // Les anciennes données locales globales ne sont volontairement pas importées : elles ne portent aucun identifiant d'établissement fiable.
    const [employeesResult,shiftsResult,absencesResult]=await Promise.all([
     client.from("Employées").select("id,name,job_title,hourly_rate,user_id").eq("organization_id",org.id).order("created_at",{ascending:true}),
@@ -399,7 +399,7 @@ refresh();
    cloudStatus("Votre espace « "+org.name+" » est synchronisé. Vos données sont enregistrées en ligne.","success");
    await loadSupportTickets();
    await loadSubscription();
-   if(window.shiftPilotSubscriptionAccess===false){
+   if(window.shiftPilotSubscriptionAccess===false&&["owner","admin"].includes(window.shiftPilotRole||"")){
     const subscriptionTab=document.querySelector('nav button[data-page="subscription"]');
     if(subscriptionTab)subscriptionTab.click();
    }
